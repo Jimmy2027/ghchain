@@ -1,17 +1,19 @@
 """Console script for ghchain."""
 
-import subprocess
-
 import click
 
-from ghchain.config import Config
 from ghchain.git_utils import (
+    checkout_branch,
+    checkout_new_branch,
     create_branch_name,
     get_commits_not_in_base_branch,
-    get_git_base_dir,
+    get_current_branch,
+    git_push,
     local_branch_exists,
     rebase_onto_branch,
+    set_upstream_to_origin,
     update_base_branch,
+    update_branch,
 )
 from ghchain.github_utils import (
     create_pull_request,
@@ -30,20 +32,22 @@ pr_stack = []
 )
 @click.option("--draft", is_flag=True, help="Create the pull request as a draft.")
 @click.option(
-    "--run-tests",
+    "--with-tests",
     is_flag=True,
     help="Run the github workflows that are specified in the .ghchain.toml config of the repository.",
 )
 @click.option(
-    "--all-tests",
-    is_flag=True,
+    "--run-tests",
+    type=str,
+    default=None,
     help=(
         "Run the github workflows that are specified in the .ghchain.toml "
-        "config of the repository for all PR's in the stack."
+        "config of the repository for the specified branch. If '.' is passed,"
+        " the current branch will be used."
     ),
 )
 @click.option("--rebase-onto", default=None)
-def main(default_base_branch, draft, run_tests, all_tests, rebase_onto):
+def main(default_base_branch, draft, with_tests, rebase_onto, run_tests):
     """
     From your dev branch, gather all commits that are not in the default base branch (main).
     For each commit, create a new branch based on the previous branch with the next commit,
@@ -57,10 +61,19 @@ def main(default_base_branch, draft, run_tests, all_tests, rebase_onto):
         rebase_onto_branch(rebase_onto)
         return
 
+    if run_tests:
+        # Run the workflows for the specified branch
+        branch_name = get_current_branch() if run_tests == "." else run_tests
+        pr_url = get_pr_url_for_branch(branch_name)
+        if not pr_url:
+            click.echo(f"No open PR found for branch '{branch_name}'.")
+            return
+        update_pr_descriptions(run_tests=(pr_url, branch_name), pr_stack=[pr_url])
+        return
+
     base_branch = default_base_branch
     update_base_branch(base_branch)
 
-    config = Config.from_toml(get_git_base_dir() / ".ghchain.toml")
     commits = get_commits_not_in_base_branch(base_branch=default_base_branch)
     if not commits:
         click.echo("No commits found that are not in main.")
@@ -70,8 +83,9 @@ def main(default_base_branch, draft, run_tests, all_tests, rebase_onto):
         click.echo(f"Processing commit: {commit_sha} - {commit_msg}")
         branch_name = create_branch_name(commit_msg)
 
-        subprocess.run(["git", "checkout", base_branch])
-        subprocess.run(["git", "pull", "origin", base_branch])
+        checkout_branch(base_branch)
+        update_branch(base_branch)
+
         if local_branch_exists(branch_name):
             click.echo(
                 f"Local branch '{branch_name}' already exists. Checking for existing PR..."
@@ -83,36 +97,21 @@ def main(default_base_branch, draft, run_tests, all_tests, rebase_onto):
                 )
                 continue
         else:
-            # ask user to continue with branch name
-            if not click.confirm(
-                f"Create a new branch '{branch_name}' for this commit?", default=True
-            ):
-                continue
-            subprocess.run(["git", "checkout", "-b", branch_name, commit_sha])
-            subprocess.run(["git", "push", "origin", branch_name])
-            subprocess.run(
-                [
-                    "git",
-                    "branch",
-                    "--set-upstream-to",
-                    f"origin/{branch_name}",
-                    branch_name,
-                ]
-            )
+            checkout_new_branch(branch_name, commit_sha)
+            set_upstream_to_origin(branch_name)
+            git_push(branch_name)
             pr_url = create_pull_request(
-                config,
                 base_branch,
                 branch_name,
                 branch_name,
                 commit_msg,
                 draft,
-                run_tests,
+                with_tests,
             )
         if pr_url:
             pr_stack.append(pr_url)
             update_pr_descriptions(
-                config=config,
-                run_tests=(pr_url, branch_name) if run_tests and all_tests else None,
+                run_tests=(pr_url, branch_name) if with_tests else None,
                 pr_stack=pr_stack,
             )
             base_branch = branch_name
@@ -120,4 +119,4 @@ def main(default_base_branch, draft, run_tests, all_tests, rebase_onto):
             "Do you want to continue with the next commit?", default=True
         ):
             break
-        subprocess.run(["git", "checkout", default_base_branch])
+        checkout_branch(default_base_branch)

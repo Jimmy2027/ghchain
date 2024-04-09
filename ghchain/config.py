@@ -3,6 +3,8 @@ from pathlib import Path
 
 import tomllib
 
+from ghchain.git_utils import get_git_base_dir
+
 
 @dataclass(frozen=True)
 class Config:
@@ -15,3 +17,6 @@ class Config:
         toml_string = toml_fn.read_text()
         toml_dict = tomllib.loads(toml_string)
         return cls(**toml_dict)
+
+
+config = Config.from_toml(get_git_base_dir() / ".ghchain.toml")

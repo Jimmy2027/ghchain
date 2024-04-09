@@ -5,7 +5,7 @@ from typing import Optional, Tuple
 
 import click
 
-from ghchain.config import Config
+from ghchain.config import config
 from ghchain.utils import run_command
 
 STACK_LIST_START_MARKER = "<!-- STACK_LIST_START -->"
@@ -26,10 +26,14 @@ def run_workflows(workflow_ids: list[str], branch: str) -> list[str]:
         print(result.stdout)
         repo_url = get_repo_url()
 
+        workflow_overview_url = (
+            f"{repo_url}/actions/workflows/{workflow_id}.yml?query=branch%3A{ branch }"
+        )
+
         md_badges.append(
             (
                 f"[![{workflow_id}]({repo_url}/actions/workflows/{workflow_id}.yml/badge.svg"
-                f"?branch={branch})]({repo_url}/actions/workflows/{workflow_id}.yml)"
+                f"?branch={branch})]({workflow_overview_url})"
             )
         )
     return md_badges
@@ -47,7 +51,7 @@ def get_repo_url() -> str:
 
 
 def create_pull_request(
-    config, base_branch, head_branch, title, body, draft=False, run_tests=False
+    base_branch, head_branch, title, body, draft=False, run_tests=False
 ):
     if run_tests:
         md_badges = run_workflows(config.workflows, head_branch)
@@ -98,45 +102,50 @@ def get_workflow_pr_string(md_badges: list[str]):
     )
 
 
-def update_pr_descriptions(
-    config: Config, run_tests: Optional[Tuple[str, str]], pr_stack
-):
-    """Update all PRs in the stack with the full stack list in their descriptions, highlighting the current PR."""
-    for pr_url in pr_stack:
-        stack_list_lines = []
+def update_pr_stacklist_description(current_body, pr_url, pr_stack) -> str:
+    """Update all PRs in the stack with the full stack list in their descriptions."""
+    stack_list_lines = []
 
-        current_pr_number = pr_url.split("/")[-1]
+    for pr in pr_stack:
+        # Highlight the current PR with an arrow
+        if pr == pr_url:
+            stack_list_lines.insert(0, f"- -> {pr}")
+        else:
+            stack_list_lines.insert(0, f"- {pr}")
 
-        for pr in pr_stack:
-            # Highlight the current PR with an arrow
-            if pr == pr_url:
-                stack_list_lines.insert(0, f"- -> {pr}")
-            else:
-                stack_list_lines.insert(0, f"- {pr}")
+    stack_list_md = (
+        f"{STACK_LIST_START_MARKER}\nStack from [ghchain](https://github.com/Jimmy2027/ghchain) (oldest at the bottom):\n"
+        + "\n".join(stack_list_lines)
+        + f"\n{STACK_LIST_END_MARKER}"
+    )
 
-        stack_list_md = (
-            f"{STACK_LIST_START_MARKER}\nStack from [ghchain](https://github.com/Jimmy2027/ghchain) (oldest at the bottom):\n"
-            + "\n".join(stack_list_lines)
-            + f"\n{STACK_LIST_END_MARKER}"
+    if (
+        STACK_LIST_START_MARKER in current_body
+        and STACK_LIST_END_MARKER in current_body
+    ):
+        updated_body = re.sub(
+            f"{STACK_LIST_START_MARKER}.*?{STACK_LIST_END_MARKER}",
+            stack_list_md,
+            current_body,
+            flags=re.DOTALL,
         )
+    else:
+        updated_body = f"{current_body}\n\n{stack_list_md}"
+    return updated_body
 
+
+def update_pr_descriptions(run_tests: Optional[Tuple[str, str]], pr_stack):
+    """
+    Update all PRs in the stack with the full stack list in their descriptions, highlighting the current PR.
+    run_tests is a tuple of the pr_url and the branch name.
+    """
+    for pr_url in pr_stack:
+        current_pr_number = pr_url.split("/")[-1]
         current_body = get_pr_body(current_pr_number)
 
-        if (
-            STACK_LIST_START_MARKER in current_body
-            and STACK_LIST_END_MARKER in current_body
-        ):
-            updated_body = re.sub(
-                f"{STACK_LIST_START_MARKER}.*?{STACK_LIST_END_MARKER}",
-                stack_list_md,
-                current_body,
-                flags=re.DOTALL,
-            )
-        else:
-            updated_body = f"{current_body}\n\n{stack_list_md}"
+        updated_body = update_pr_stacklist_description(current_body, pr_url, pr_stack)
 
         if run_tests and run_tests[0] == pr_url:
-            # TODO need to check that the PR corresponds to the branch_name
             md_badges = run_workflows(config.workflows, run_tests[1])
             workflow_str = get_workflow_pr_string(md_badges)
 
@@ -161,7 +170,7 @@ def update_pr_descriptions(
         click.echo(f"PR description updated for PR #{current_pr_number}.")
 
 
-def get_pr_url_for_branch(branch_name):
+def get_pr_url_for_branch(branch_name) -> Optional[str]:
     result = subprocess.run(
         ["gh", "pr", "list", "--json", "url,headRefName", "--state", "open"],
         stdout=subprocess.PIPE,
