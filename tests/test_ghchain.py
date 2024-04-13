@@ -4,7 +4,6 @@
 
 from pathlib import Path
 
-from ghchain.git_utils import rebase_onto_branch
 
 my_test_repo = Path("~/ssrc/mytest").expanduser()
 import os
@@ -17,6 +16,9 @@ import pytest
 from click.testing import CliRunner
 
 from ghchain import cli
+
+from ghchain.git_utils import get_commits_not_in_base_branch, rebase_onto_branch
+from ghchain.github_utils import print_status
 
 dev_branch = "mydev"
 
@@ -97,6 +99,11 @@ def test_rebase():
 def test_run_workflows():
     # result = create_test_stack(True)
     CliRunner().invoke(cli.main, ["--run-tests"])
+
+
+def test_print_status():
+    commits = get_commits_not_in_base_branch(base_branch="main")
+    print_status(commits)
 
 
 if __name__ == "__main__":

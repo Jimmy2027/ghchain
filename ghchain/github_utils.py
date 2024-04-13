@@ -1,11 +1,15 @@
 import json
 import re
 import subprocess
+from dataclasses import dataclass
 from typing import Optional, Tuple
 
 import click
+from rich.console import Console
+from rich.table import Table
 
 from ghchain.config import config
+from ghchain.git_utils import get_stack
 from ghchain.utils import run_command
 
 STACK_LIST_START_MARKER = "<!-- STACK_LIST_START -->"
@@ -169,7 +173,14 @@ def update_pr_descriptions(run_tests: Optional[Tuple[str, str]], pr_stack):
 
         click.echo(f"PR description updated for PR #{current_pr_number}.")
 
-
+def get_branch_name_for_pr_id(pr_id) -> Optional[str]:
+    result = subprocess.run(
+        ["gh", "pr", "list", "--json", "headRefName,number", "--state", "open"],
+        stdout=subprocess.PIPE,
+        text=True,
+    )
+    prs = json.loads(result.stdout)
+    return next((pr["headRefName"] for pr in prs if pr["number"] == pr_id), None)
 def get_pr_url_for_branch(branch_name) -> Optional[str]:
     result = subprocess.run(
         ["gh", "pr", "list", "--json", "url,headRefName", "--state", "open"],
@@ -178,3 +189,180 @@ def get_pr_url_for_branch(branch_name) -> Optional[str]:
     )
     prs = json.loads(result.stdout)
     return next((pr["url"] for pr in prs if pr["headRefName"] == branch_name), None)
+
+
+def get_pr_url_for_id(pr_id) -> Optional[str]:
+    result = subprocess.run(
+        ["gh", "pr", "list", "--json", "url,number", "--state", "open"],
+        stdout=subprocess.PIPE,
+        text=True,
+    )
+    prs = json.loads(result.stdout)
+    return next((pr["url"] for pr in prs if pr["number"] == pr_id), None)
+
+
+def get_pr_id_for_branch(branch_name) -> Optional[str]:
+    pr_url = get_pr_url_for_branch(branch_name)
+    if pr_url:
+        return pr_url.split("/")[-1]
+    return None
+
+
+def get_pr_approval(pr_id) -> bool:
+    result = run_command(
+        ["gh", "pr", "view", pr_id, "--json", "reviewDecision"],
+    )
+    return json.loads(result.stdout)["reviewDecision"] == "APPROVED"
+
+
+def get_pr_isdraft(pr_id) -> bool:
+    result = run_command(
+        ["gh", "pr", "view", pr_id, "--json", "isDraft"],
+    )
+    return json.loads(result.stdout)["isDraft"]
+
+
+@dataclass
+class WorkflowStatus:
+    status: str
+    conclusion: str
+    name: str
+    branch: str
+    commit: str
+    event: str
+    id: str
+    elapsed: str
+    timestamp: str
+    workflow_yml_fn: str
+
+    @classmethod
+    def from_line(cls, line: str, workflow_yml_fn: str):
+        status, conclusion, name, branch, commit, event, id, elapsed, timestamp = (
+            line.split("\t")
+        )
+        return cls(
+            status=status,
+            conclusion=conclusion,
+            name=name,
+            branch=branch,
+            commit=commit,
+            event=event,
+            id=id,
+            elapsed=elapsed,
+            timestamp=timestamp,
+            workflow_yml_fn=workflow_yml_fn,
+        )
+
+    @classmethod
+    def create(cls, workflow_yml_fn: str, branchname: str):
+        result = run_command(
+            [
+                "gh",
+                "run",
+                "list",
+                "--workflow",
+                f"{ workflow_yml_fn }.yml",
+                "-b",
+                branchname,
+            ],
+            check=True,
+        )
+        lines = result.stdout.splitlines()
+        if lines:
+            line = result.stdout.splitlines()[0]
+            return WorkflowStatus.from_line(line, workflow_yml_fn)
+        return None
+
+
+@dataclass
+class PrStatus:
+    branchname: str
+    pr_id: int
+    review_decision: bool
+    is_draft: bool
+    is_mergeable: bool
+    workflow_statuses: Optional[list[WorkflowStatus]] = None
+
+    @classmethod
+    def from_branchname(cls, branchname: str):
+        pr_id = get_pr_id_for_branch(branchname)
+        if not pr_id:
+            return None
+        workflow_statuses = []
+        for workflow in config.workflows:
+            workflow_statuses.append(WorkflowStatus.create(workflow, branchname))
+
+        result = run_command(
+            ["gh", "pr", "view", pr_id, "--json", "reviewDecision,isDraft,mergeable"],
+        )
+        result_dict = json.loads(result.stdout)
+
+        return cls(
+            branchname=branchname,
+            pr_id=int(pr_id),
+            workflow_statuses=workflow_statuses,
+            review_decision=result_dict["reviewDecision"],
+            is_draft=result_dict["isDraft"],
+            is_mergeable=result_dict["mergeable"],
+        )
+
+
+@dataclass
+class StackStatus:
+    pr_statuses: list[PrStatus]
+    commits: list[Tuple[str, str]]
+    branches: list[str]
+
+    @classmethod
+    def from_commits(cls, commits: list[Tuple[str, str]]):
+        stack = get_stack([e[0] for e in commits])
+        pr_statuses = []
+        for branch in stack:
+            pr_statuses.append(PrStatus.from_branchname(branch))
+
+        return cls(pr_statuses=pr_statuses, commits=commits, branches=stack)
+
+    def print_status(self):
+        console = Console()
+        table = Table(show_header=True, header_style="bold magenta")
+        table.add_column("Branch", style="dim", width=30)
+        table.add_column("PR ID", style="dim", width=6)
+        table.add_column("Review Decision", style="dim", width=20)
+        table.add_column("Draft", style="dim", width=8)
+        table.add_column("Workflow Status", style="dim", width=30)
+
+        for pr_status in self.pr_statuses:
+            if not pr_status:
+                continue
+            if not pr_status.workflow_statuses:
+                continue
+            review_decision_color = (
+                "bright_green" if pr_status.review_decision == "APPROVED" else "default"
+            )
+            table.add_row(
+                f"[bold gray]{ pr_status.branchname }[/]",
+                str(pr_status.pr_id),
+                f"[bold {review_decision_color}]{pr_status.review_decision}[/]",
+                str(pr_status.is_draft),
+                "",
+            )
+            for workflow_status in pr_status.workflow_statuses:
+                if not workflow_status:
+                    continue
+                color = (
+                    "bright_green"
+                    if workflow_status.conclusion == "success"
+                    else "bright_red"
+                )
+                table.add_row(
+                    "",
+                    "",
+                    "",
+                    "",
+                    f"[bold {color}]{workflow_status.workflow_yml_fn}[/]: {workflow_status.status, workflow_status.conclusion}",
+                )
+        console.print(table)
+
+
+def print_status(commits: list[Tuple[str, str]]):
+    StackStatus.from_commits(commits).print_status()

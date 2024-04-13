@@ -17,7 +17,9 @@ from ghchain.git_utils import (
 )
 from ghchain.github_utils import (
     create_pull_request,
+    get_branch_name_for_pr_id,
     get_pr_url_for_branch,
+    print_status,
     update_pr_descriptions,
 )
 
@@ -31,6 +33,7 @@ pr_stack = []
     help="Default base branch for the first PR.",
 )
 @click.option("--draft", is_flag=True, help="Create the pull request as a draft.")
+@click.option("--status", is_flag=True, help="Print the status of the PRs")
 @click.option(
     "--with-tests",
     is_flag=True,
@@ -47,7 +50,7 @@ pr_stack = []
     ),
 )
 @click.option("--rebase-onto", default=None)
-def main(default_base_branch, draft, with_tests, rebase_onto, run_tests):
+def main(default_base_branch, draft, with_tests, rebase_onto, run_tests, status):
     """
     From your dev branch, gather all commits that are not in the default base branch (main).
     For each commit, create a new branch based on the previous branch with the next commit,
@@ -61,9 +64,18 @@ def main(default_base_branch, draft, with_tests, rebase_onto, run_tests):
         rebase_onto_branch(rebase_onto)
         return
 
+    if status:
+        commits = get_commits_not_in_base_branch(base_branch=default_base_branch)
+        print_status(commits)
+        return
+
     if run_tests:
         # Run the workflows for the specified branch
-        branch_name = get_current_branch() if run_tests == "." else run_tests
+        if run_tests.isdigit():
+            branch_name = get_branch_name_for_pr_id(int(run_tests))
+        else:
+            branch_name = get_current_branch() if run_tests == "." else run_tests
+
         pr_url = get_pr_url_for_branch(branch_name)
         if not pr_url:
             click.echo(f"No open PR found for branch '{branch_name}'.")
@@ -75,6 +87,7 @@ def main(default_base_branch, draft, with_tests, rebase_onto, run_tests):
     update_base_branch(base_branch)
 
     commits = get_commits_not_in_base_branch(base_branch=default_base_branch)
+
     if not commits:
         click.echo("No commits found that are not in main.")
         return

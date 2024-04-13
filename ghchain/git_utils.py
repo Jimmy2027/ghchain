@@ -109,7 +109,6 @@ def get_stack(commits: list[str]) -> list[str]:
     Sort the branches by the number of those commits that they contain
     return the sorted list of branches
     """
-    # TODO make sure this works also if one branch has multiple commits
     stack = defaultdict(int)
     for commit in commits:
         result = run_command(["git", "branch", "--contains", commit])
@@ -133,11 +132,18 @@ def create_branch_name(commit_message):
     return re.sub(r"\s+", "_", sanitized)[:30]
 
 
-def get_commits_not_in_base_branch(base_branch):
+def get_commits_not_in_base_branch(base_branch, ignore_fixup=True):
     commits = subprocess.getoutput(
         f"git log {base_branch}..HEAD --reverse --format='%H %s'"
     ).splitlines()
-    return [line.split(" ", 1) for line in commits]
+    if ignore_fixup:
+        return [
+            line.split(" ", 1)
+            for line in commits
+            if not line.split(" ", 1)[1].startswith("fixup!")
+        ]
+    else:
+        return [line.split(" ", 1) for line in commits]
 
 
 def checkout_new_branch(branch_name, commit_sha):
@@ -148,6 +154,7 @@ def set_upstream_to_origin(branch_name):
     run_command(
         ["git", "branch", "--set-upstream-to", f"origin/{branch_name}", branch_name]
     )
+
 
 def get_current_branch() -> str:
     result = run_command(["git", "rev-parse", "--abbrev-ref", "HEAD"])
