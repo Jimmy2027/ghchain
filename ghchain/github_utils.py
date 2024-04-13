@@ -2,7 +2,9 @@ import json
 import re
 import subprocess
 from dataclasses import dataclass
+import time
 from typing import Optional, Tuple
+from rich.live import Live
 
 import click
 from rich.console import Console
@@ -173,6 +175,7 @@ def update_pr_descriptions(run_tests: Optional[Tuple[str, str]], pr_stack):
 
         click.echo(f"PR description updated for PR #{current_pr_number}.")
 
+
 def get_branch_name_for_pr_id(pr_id) -> Optional[str]:
     result = subprocess.run(
         ["gh", "pr", "list", "--json", "headRefName,number", "--state", "open"],
@@ -181,6 +184,8 @@ def get_branch_name_for_pr_id(pr_id) -> Optional[str]:
     )
     prs = json.loads(result.stdout)
     return next((pr["headRefName"] for pr in prs if pr["number"] == pr_id), None)
+
+
 def get_pr_url_for_branch(branch_name) -> Optional[str]:
     result = subprocess.run(
         ["gh", "pr", "list", "--json", "url,headRefName", "--state", "open"],
@@ -322,8 +327,7 @@ class StackStatus:
 
         return cls(pr_statuses=pr_statuses, commits=commits, branches=stack)
 
-    def print_status(self):
-        console = Console()
+    def get_status_table(self):
         table = Table(show_header=True, header_style="bold magenta")
         table.add_column("Branch", style="dim", width=30)
         table.add_column("PR ID", style="dim", width=6)
@@ -361,8 +365,21 @@ class StackStatus:
                     "",
                     f"[bold {color}]{workflow_status.workflow_yml_fn}[/]: {workflow_status.status, workflow_status.conclusion}",
                 )
-        console.print(table)
+        return table
+
+    def print_status(self):
+        console = Console()
+        console.print(self.get_status_table())
+
+    def live_status(self):
+        with Live(self.get_status_table(), refresh_per_second=1) as live:
+            while True:
+                time.sleep(60)
+                live.update(self.get_status_table())
 
 
-def print_status(commits: list[Tuple[str, str]]):
+def print_status(commits: list[Tuple[str, str]], live: bool = False):
+    if live:
+        StackStatus.from_commits(commits).live_status()
+
     StackStatus.from_commits(commits).print_status()

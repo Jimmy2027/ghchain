@@ -35,6 +35,11 @@ pr_stack = []
 @click.option("--draft", is_flag=True, help="Create the pull request as a draft.")
 @click.option("--status", is_flag=True, help="Print the status of the PRs")
 @click.option(
+    "--live-status",
+    is_flag=True,
+    help="Print the status of the PRs, updating every minute.",
+)
+@click.option(
     "--with-tests",
     is_flag=True,
     help="Run the github workflows that are specified in the .ghchain.toml config of the repository.",
@@ -50,7 +55,9 @@ pr_stack = []
     ),
 )
 @click.option("--rebase-onto", default=None)
-def main(default_base_branch, draft, with_tests, rebase_onto, run_tests, status):
+def main(
+    default_base_branch, draft, with_tests, rebase_onto, run_tests, status, live_status
+):
     """
     From your dev branch, gather all commits that are not in the default base branch (main).
     For each commit, create a new branch based on the previous branch with the next commit,
@@ -64,9 +71,9 @@ def main(default_base_branch, draft, with_tests, rebase_onto, run_tests, status)
         rebase_onto_branch(rebase_onto)
         return
 
-    if status:
+    if status or live_status:
         commits = get_commits_not_in_base_branch(base_branch=default_base_branch)
-        print_status(commits)
+        print_status(commits, live=live_status)
         return
 
     if run_tests:
