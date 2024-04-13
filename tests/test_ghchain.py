@@ -17,7 +17,12 @@ from click.testing import CliRunner
 
 from ghchain import cli
 
-from ghchain.git_utils import get_commits_not_in_base_branch, rebase_onto_branch
+from ghchain.git_utils import (
+    Stack,
+    get_all_branches,
+    get_commits_not_in_base_branch,
+    rebase_onto_branch,
+)
 from ghchain.github_utils import print_status
 
 dev_branch = "mydev"
@@ -28,12 +33,14 @@ def setup_repo():
     subprocess.run(["git", "checkout", "main"])
     subprocess.run(["git", "reset", "--hard", "origin/main"])
 
+    branches = set(get_all_branches()) - {"main"}
+
     # delete mydev local and remote branches
-    for branch in {"mydev", "commit_0", "commit_1", "commit_2", "commit_3"}:
+    for branch in branches:
         subprocess.run(["git", "branch", "-D", branch])
         subprocess.run(["git", "push", "origin", "--delete", branch])
 
-    # delete all pr's in mytest repo using github api
+    # delete all pr's
     prs_json = subprocess.run(
         ["gh", "pr", "list", "--json", "url"], capture_output=True, text=True
     ).stdout
@@ -68,14 +75,14 @@ def create_test_stack(run_workflows=False):
         return runner.invoke(cli.main)
 
 
-def change_stack_with_conflict():
-    subprocess.run(["git", "checkout", "commit_0"])
+def change_stack_with_conflict(branch_to_change):
+    subprocess.run(["git", "checkout", branch_to_change])
     # insert a line in the README.md file
     with open("README.md", "a") as f:
         f.write("line 5\n")
     subprocess.run(["git", "add", "README.md"])
     subprocess.run(["git", "commit", "--amend", "--no-edit"])
-    subprocess.run(["git", "push", "origin", "commit_0", "--force"])
+    subprocess.run(["git", "push", "origin", branch_to_change, "--force"])
 
     subprocess.run(["git", "checkout", "mydev"])
 
@@ -91,9 +98,11 @@ def test_rebase():
     # create the test stack, then checkout branch with commit 0 and amend no edit the commit
     # then run ghchain --rebase-onto mydev
     result = create_test_stack(False)
-    change_stack_with_conflict()
+    stack = Stack.create(base_branch="main")
+    branch_to_change = stack.branches[3]
+    change_stack_with_conflict(branch_to_change)
     # you will have to resolve the conflict manually...
-    rebase_onto_branch("commit_0")
+    rebase_onto_branch(branch_to_change)
 
 
 def test_run_workflows():
@@ -107,5 +116,5 @@ def test_print_status():
 
 
 if __name__ == "__main__":
-    test_ghchain(True)
     # test_run_workflows()
+    test_ghchain(True)

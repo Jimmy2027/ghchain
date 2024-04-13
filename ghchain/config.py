@@ -9,6 +9,7 @@ from ghchain.git_utils import get_git_base_dir
 @dataclass(frozen=True)
 class Config:
     workflows: list[str]
+    branch_name_template: str = "{git_config_author}-{pr_id}"
 
     @classmethod
     def from_toml(cls, toml_fn: Path):

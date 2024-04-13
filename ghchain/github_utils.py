@@ -11,7 +11,7 @@ from rich.console import Console
 from rich.table import Table
 
 from ghchain.config import config
-from ghchain.git_utils import get_stack
+from ghchain.git_utils import Stack
 from ghchain.utils import run_command
 
 STACK_LIST_START_MARKER = "<!-- STACK_LIST_START -->"
@@ -206,6 +206,22 @@ def get_pr_url_for_id(pr_id) -> Optional[str]:
     return next((pr["url"] for pr in prs if pr["number"] == pr_id), None)
 
 
+def get_latest_pr_id() -> int:
+    result = subprocess.run(
+        ["gh", "pr", "list", "--json", "number", "--state", "all"],
+        stdout=subprocess.PIPE,
+        text=True,
+    )
+    prs = json.loads(result.stdout)
+
+    sorted_prs = sorted(prs, key=lambda pr: pr["number"], reverse=True)
+
+    if not sorted_prs:
+        return -1
+
+    return sorted_prs[0]["number"]
+
+
 def get_pr_id_for_branch(branch_name) -> Optional[str]:
     pr_url = get_pr_url_for_branch(branch_name)
     if pr_url:
@@ -315,17 +331,15 @@ class PrStatus:
 @dataclass
 class StackStatus:
     pr_statuses: list[PrStatus]
-    commits: list[Tuple[str, str]]
-    branches: list[str]
+    stack: Optional[Stack] = None
 
     @classmethod
-    def from_commits(cls, commits: list[Tuple[str, str]]):
-        stack = get_stack([e[0] for e in commits])
+    def from_stack(cls, stack: Stack):
         pr_statuses = []
-        for branch in stack:
+        for branch in stack.branches:
             pr_statuses.append(PrStatus.from_branchname(branch))
 
-        return cls(pr_statuses=pr_statuses, commits=commits, branches=stack)
+        return cls(pr_statuses=pr_statuses, stack=stack)
 
     def get_status_table(self):
         table = Table(show_header=True, header_style="bold magenta")
@@ -378,8 +392,8 @@ class StackStatus:
                 live.update(self.get_status_table())
 
 
-def print_status(commits: list[Tuple[str, str]], live: bool = False):
+def print_status(stack: Stack, live: bool = False):
     if live:
-        StackStatus.from_commits(commits).live_status()
+        StackStatus.from_stack(stack).live_status()
 
-    StackStatus.from_commits(commits).print_status()
+    StackStatus.from_stack(stack).print_status()

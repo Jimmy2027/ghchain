@@ -1,12 +1,21 @@
+from dataclasses import dataclass
 import os
-import re
 import subprocess
 from collections import defaultdict
 from pathlib import Path
+from typing import Optional, Union
 
 import click
 
 from ghchain.utils import run_command
+
+
+def get_all_branches() -> list[str]:
+    result = subprocess.run(["git", "branch"], stdout=subprocess.PIPE, text=True)
+    branches = result.stdout.splitlines()
+    # Remove the leading '*' from the current branch and strip leading/trailing whitespace
+    branches = [branch.replace("*", "").strip() for branch in branches]
+    return branches
 
 
 def git_push(branch_name: str):
@@ -103,7 +112,80 @@ def rebase_onto_branch(branch: str):
     print(f"{ result.stdout }\n{ result.stderr }")
 
 
-def get_stack(commits: list[str]) -> list[str]:
+def find_branches_with_commit(commit: str) -> list[str]:
+    branches = run_command(["git", "branch", "--contains", commit])
+    branches = [
+        branch.replace("*", "").strip()
+        for branch in branches.stdout.split("\n")
+        if branch
+    ]
+    return branches
+
+
+@dataclass
+class Stack:
+    commits: list[str]
+    commit2message: dict[str, str]
+    commit2branches: dict[str, set[str]]
+    dev_branch: str
+    base_branch: str = "main"
+
+    @classmethod
+    def create(cls, base_branch: str):
+        dev_branch = get_current_branch()
+        commit2message = {
+            e[0]: e[1] for e in get_commits_not_in_base_branch(base_branch)
+        }
+        commits = list(commit2message)
+        commit2branch = {
+            commit: set(find_branches_with_commit(commit)) for commit in commits
+        }
+
+        return cls(commits, commit2message, commit2branch, dev_branch=dev_branch)
+
+    def commit2branch(self, commit: str) -> Optional[str]:
+        # return the branch for which the commit is the latest commit
+        return next(
+            (
+                branch
+                for branch, commits in self.branch2commits.items()
+                if commit == commits[-1]
+            ),
+            None,
+        )
+
+    @property
+    def branch2commits(self) -> dict[str, list[str]]:
+        return {
+            branch: get_commits_not_in_base_branch(
+                self.base_branch, target_branch=branch, only_sha=True
+            )
+            for branch in set(
+                b for branches in self.commit2branches.values() for b in branches
+            )
+        }
+
+    @property
+    def branches(self) -> list[str]:
+        branch_commit_counts = {
+            branch: len(commits) for branch, commits in self.branch2commits.items()
+        }
+        sorted_branches = sorted(
+            branch_commit_counts, key=branch_commit_counts.get, reverse=True
+        )
+
+        return sorted_branches
+
+    @property
+    def commits_without_branch(self) -> list[str]:
+        return [
+            commit
+            for commit, branches in self.commit2branches.items()
+            if not (branches - {self.dev_branch})
+        ]
+
+
+def get_stack(commits: list[str], dev_branch: str) -> list[str]:
     """
     Get the commits that are not in base branch
     Sort the branches by the number of those commits that they contain
@@ -113,9 +195,12 @@ def get_stack(commits: list[str]) -> list[str]:
     for commit in commits:
         result = run_command(["git", "branch", "--contains", commit])
         branches = result.stdout.split("\n")
+        branches = [branch.replace("*", "").strip() for branch in branches if branch]
+        branches = [branch for branch in branches if branch != dev_branch]
+        if not branches:
+            continue
         for branch in branches:
-            if branch:
-                stack[branch.replace("*", "").strip()] += 1
+            stack[branch] += 1
 
     sorted_stack = sorted(stack.items(), key=lambda item: item[1], reverse=True)
 
@@ -127,23 +212,36 @@ def local_branch_exists(branch_name):
     return bool(result.stdout.strip())
 
 
-def create_branch_name(commit_message):
-    sanitized = re.sub(r"[^a-zA-Z0-9 ]", "", commit_message.lower())
-    return re.sub(r"\s+", "_", sanitized)[:30]
+def create_branch_name(branch_name_template: str, next_pr_id: int):
+    # Get the git author name
+    author_name = subprocess.getoutput("git config user.name").replace(" ", "_").lower()
+
+    branch_name = branch_name_template.format(
+        git_config_author=author_name, pr_id=next_pr_id
+    )
+
+    return branch_name
 
 
-def get_commits_not_in_base_branch(base_branch, ignore_fixup=True):
+def get_commits_not_in_base_branch(
+    base_branch, ignore_fixup=True, target_branch="HEAD", only_sha=False
+) -> Union[list[str], list[list[str]]]:
     commits = subprocess.getoutput(
-        f"git log {base_branch}..HEAD --reverse --format='%H %s'"
+        f"git log {base_branch}..{target_branch} --reverse --format='%H %s'"
     ).splitlines()
     if ignore_fixup:
-        return [
+        commits = [
             line.split(" ", 1)
             for line in commits
             if not line.split(" ", 1)[1].startswith("fixup!")
         ]
     else:
-        return [line.split(" ", 1) for line in commits]
+        commits = [line.split(" ", 1) for line in commits]
+
+    if only_sha:
+        return [commit[0] for commit in commits]
+    else:
+        return commits
 
 
 def checkout_new_branch(branch_name, commit_sha):

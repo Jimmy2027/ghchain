@@ -3,13 +3,12 @@
 import click
 
 from ghchain.git_utils import (
+    Stack,
     checkout_branch,
     checkout_new_branch,
     create_branch_name,
-    get_commits_not_in_base_branch,
     get_current_branch,
     git_push,
-    local_branch_exists,
     rebase_onto_branch,
     set_upstream_to_origin,
     update_base_branch,
@@ -18,10 +17,12 @@ from ghchain.git_utils import (
 from ghchain.github_utils import (
     create_pull_request,
     get_branch_name_for_pr_id,
+    get_latest_pr_id,
     get_pr_url_for_branch,
     print_status,
     update_pr_descriptions,
 )
+from ghchain.config import config
 
 pr_stack = []
 
@@ -72,8 +73,9 @@ def main(
         return
 
     if status or live_status:
-        commits = get_commits_not_in_base_branch(base_branch=default_base_branch)
-        print_status(commits, live=live_status)
+        print_status(
+            stack=Stack.create(base_branch=default_base_branch), live=live_status
+        )
         return
 
     if run_tests:
@@ -90,53 +92,49 @@ def main(
         update_pr_descriptions(run_tests=(pr_url, branch_name), pr_stack=[pr_url])
         return
 
-    base_branch = default_base_branch
-    update_base_branch(base_branch)
+    update_base_branch(default_base_branch)
 
-    commits = get_commits_not_in_base_branch(base_branch=default_base_branch)
+    stack = Stack.create(base_branch=default_base_branch)
 
-    if not commits:
+    if not stack.commits:
         click.echo("No commits found that are not in main.")
         return
 
-    for commit_sha, commit_msg in commits:
+    for commit_sha, commit_msg in stack.commit2message.items():
         click.echo(f"Processing commit: {commit_sha} - {commit_msg}")
-        branch_name = create_branch_name(commit_msg)
-
-        checkout_branch(base_branch)
-        update_branch(base_branch)
-
-        if local_branch_exists(branch_name):
-            click.echo(
-                f"Local branch '{branch_name}' already exists. Checking for existing PR..."
+        if commit_sha in stack.commits_without_branch:
+            branch_name = create_branch_name(
+                config.branch_name_template, get_latest_pr_id() + 1
             )
-            pr_url = get_pr_url_for_branch(branch_name)
-            if not pr_url:
-                click.echo(
-                    f"No open PR found for branch '{branch_name}'. You may need to create a PR manually."
-                )
-                continue
-        else:
             checkout_new_branch(branch_name, commit_sha)
             set_upstream_to_origin(branch_name)
             git_push(branch_name)
             pr_url = create_pull_request(
-                base_branch,
-                branch_name,
-                branch_name,
-                commit_msg,
-                draft,
-                with_tests,
+                base_branch=default_base_branch,
+                head_branch=branch_name,
+                title=commit_msg,
+                body=commit_msg,
+                draft=draft,
+                run_tests=with_tests,
             )
+        else:
+            branch_name: str = stack.commit2branch(commit_sha)
+            checkout_branch(branch_name)
+            update_branch(branch_name)
+            pr_url = get_pr_url_for_branch(branch_name)
+
         if pr_url:
             pr_stack.append(pr_url)
             update_pr_descriptions(
                 run_tests=(pr_url, branch_name) if with_tests else None,
                 pr_stack=pr_stack,
             )
-            base_branch = branch_name
+            default_base_branch = branch_name
         if not click.confirm(
             "Do you want to continue with the next commit?", default=True
         ):
             break
         checkout_branch(default_base_branch)
+
+    checkout_branch(stack.dev_branch)
+    click.echo("All Done!")
