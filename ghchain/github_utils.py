@@ -313,6 +313,7 @@ class PrStatus:
         for workflow in config.workflows:
             workflow_statuses.append(WorkflowStatus.create(workflow, branchname))
 
+        # TODO: add statusCheckRollup
         result = run_command(
             ["gh", "pr", "view", pr_id, "--json", "reviewDecision,isDraft,mergeable"],
         )
@@ -385,15 +386,23 @@ class StackStatus:
         console = Console()
         console.print(self.get_status_table())
 
-    def live_status(self):
-        with Live(self.get_status_table(), refresh_per_second=1) as live:
+
+def print_status(base_branch: str = "main", live: bool = False):
+    if live:
+        with Live(
+            StackStatus.from_stack(
+                Stack.create(base_branch=base_branch)
+            ).get_status_table(),
+            refresh_per_second=1,
+        ) as live_context:
             while True:
                 time.sleep(60)
-                live.update(self.get_status_table())
-
-
-def print_status(stack: Stack, live: bool = False):
-    if live:
-        StackStatus.from_stack(stack).live_status()
-
-    StackStatus.from_stack(stack).print_status()
+                live_context.console.clear()
+                live_context.update(
+                    StackStatus.from_stack(
+                        Stack.create(base_branch=base_branch)
+                    ).get_status_table()
+                )
+        return
+    StackStatus.from_stack(Stack.create(base_branch=base_branch)).print_status()
+    return

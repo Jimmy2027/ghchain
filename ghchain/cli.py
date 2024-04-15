@@ -73,9 +73,7 @@ def main(
         return
 
     if status or live_status:
-        print_status(
-            stack=Stack.create(base_branch=default_base_branch), live=live_status
-        )
+        print_status(base_branch=default_base_branch, live=live_status)
         return
 
     if run_tests:
