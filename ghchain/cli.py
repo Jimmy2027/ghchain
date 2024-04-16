@@ -55,7 +55,11 @@ pr_stack = []
         " the current branch will be used."
     ),
 )
-@click.option("--rebase-onto", default=None)
+@click.option(
+    "--rebase-onto",
+    default=None,
+    help="Rebase the current branch onto another branch, using 'update-refs' and push every updated branch to the remote.",
+)
 def main(
     default_base_branch, draft, with_tests, rebase_onto, run_tests, status, live_status
 ):
