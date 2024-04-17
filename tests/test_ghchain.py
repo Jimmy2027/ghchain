@@ -20,7 +20,6 @@ from ghchain import cli
 from ghchain.git_utils import (
     Stack,
     get_all_branches,
-    get_commits_not_in_base_branch,
     rebase_onto_branch,
 )
 from ghchain.github_utils import print_status
@@ -111,8 +110,7 @@ def test_run_workflows():
 
 
 def test_print_status():
-    commits = get_commits_not_in_base_branch(base_branch="main")
-    print_status(commits)
+    print_status()
 
 
 if __name__ == "__main__":

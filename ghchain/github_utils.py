@@ -296,6 +296,17 @@ class WorkflowStatus:
 
 
 @dataclass
+class StatusCheck:
+    completedAt: str
+    conclusion: str
+    detailsUrl: str
+    name: str
+    startedAt: str
+    status: str
+    workflowName: str
+
+
+@dataclass
 class PrStatus:
     branchname: str
     pr_id: int
@@ -303,6 +314,7 @@ class PrStatus:
     is_draft: bool
     is_mergeable: bool
     workflow_statuses: Optional[list[WorkflowStatus]] = None
+    status_checks: Optional[dict[str, StatusCheck]] = None
 
     @classmethod
     def from_branchname(cls, branchname: str):
@@ -315,7 +327,14 @@ class PrStatus:
 
         # TODO: add statusCheckRollup
         result = run_command(
-            ["gh", "pr", "view", pr_id, "--json", "reviewDecision,isDraft,mergeable"],
+            [
+                "gh",
+                "pr",
+                "view",
+                pr_id,
+                "--json",
+                "reviewDecision,isDraft,mergeable,statusCheckRollup",
+            ],
         )
         result_dict = json.loads(result.stdout)
 
@@ -326,6 +345,18 @@ class PrStatus:
             review_decision=result_dict["reviewDecision"],
             is_draft=result_dict["isDraft"],
             is_mergeable=result_dict["mergeable"],
+            status_checks={
+                status["name"]: StatusCheck(
+                    **{
+                        k: V
+                        for k, V in status.items()
+                        if k in StatusCheck.__annotations__
+                    }
+                )
+                for status in result_dict["statusCheckRollup"]
+            }
+            if result_dict["statusCheckRollup"]
+            else None,
         )
 
 
@@ -342,6 +373,18 @@ class StackStatus:
 
         return cls(pr_statuses=pr_statuses, stack=stack)
 
+    @staticmethod
+    def status2color(status: str, conclusion: str):
+        status = status.lower()
+        conclusion = conclusion.lower()
+
+        if conclusion == "success":
+            return "bright_green"
+        elif status in ["queued", "in_progress"] or conclusion == "neutral":
+            return "yellow"
+        else:
+            return "bright_red"
+
     def get_status_table(self):
         table = Table(show_header=True, header_style="bold magenta")
         table.add_column("Branch", style="dim", width=30)
@@ -349,12 +392,12 @@ class StackStatus:
         table.add_column("Review Decision", style="dim", width=20)
         table.add_column("Draft", style="dim", width=8)
         table.add_column("Workflow Status", style="dim", width=30)
+        table.add_column("Status Checks", style="dim", width=30)  # New column
 
         for pr_status in self.pr_statuses:
             if not pr_status:
                 continue
-            if not pr_status.workflow_statuses:
-                continue
+
             review_decision_color = (
                 "bright_green" if pr_status.review_decision == "APPROVED" else "default"
             )
@@ -364,22 +407,37 @@ class StackStatus:
                 f"[bold {review_decision_color}]{pr_status.review_decision}[/]",
                 str(pr_status.is_draft),
                 "",
+                "",  # Empty cell for the new column
             )
-            for workflow_status in pr_status.workflow_statuses:
-                if not workflow_status:
-                    continue
-                color = (
-                    "bright_green"
-                    if workflow_status.conclusion == "success"
-                    else "bright_red"
-                )
-                table.add_row(
-                    "",
-                    "",
-                    "",
-                    "",
-                    f"[bold {color}]{workflow_status.workflow_yml_fn}[/]: {workflow_status.status, workflow_status.conclusion}",
-                )
+
+            if pr_status.workflow_statuses:
+                for workflow_status in pr_status.workflow_statuses:
+                    if workflow_status:
+                        color = self.status2color(
+                            workflow_status.status, workflow_status.conclusion
+                        )
+                        table.add_row(
+                            "",
+                            "",
+                            "",
+                            "",
+                            f"[bold {color}]{workflow_status.workflow_yml_fn}[/]: {workflow_status.status, workflow_status.conclusion}",
+                            "",  # Empty cell for the new column
+                        )
+
+            if pr_status.status_checks:
+                for status_check in pr_status.status_checks.values():
+                    color = self.status2color(
+                        status_check.status, status_check.conclusion
+                    )
+                    table.add_row(
+                        "",
+                        "",
+                        "",
+                        "",
+                        "",
+                        f"[bold {color}]{status_check.name}[/]: {status_check.status, status_check.conclusion}",  # New row for the status check
+                    )
         return table
 
     def print_status(self):
