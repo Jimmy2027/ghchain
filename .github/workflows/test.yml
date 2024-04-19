@@ -25,7 +25,8 @@ jobs:
               run: |
                   git add .
                   git commit -m "Automated commit message"
-                  if git push --quiet "https://${{ secrets.PATSECRET }}@github.com/HendrikKlug-synthara/mytest.git"; then
+                  PAT=$(echo "${{ secrets.PATSECRET }}" | tr -d '[:space:]')
+                  if git push --quiet "https://${PAT}@github.com/HendrikKlug-synthara/mytest.git"; then
                       echo "Changes pushed"
                   else
                       echo "Failed to push changes"
