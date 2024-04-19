@@ -93,6 +93,7 @@ def test_ghchain(run_workflows):
     assert result.exit_code == 0
 
 
+@pytest.mark.manual
 def test_rebase():
     # create the test stack, then checkout branch with commit 0 and amend no edit the commit
     # then run ghchain --rebase-onto mydev
