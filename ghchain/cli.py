@@ -125,7 +125,12 @@ def main(
                 run_tests=with_tests,
             )
         else:
-            branch_name: str = stack.commit2branch(commit_sha)
+            branch_name: Optional[str] = stack.commit2branch(commit_sha)
+            if not branch_name:
+                # this happens when one branch in the stack has multiple commits
+                click.echo(f"Branch not found for commit {commit_sha}.")
+                raise click.Abort()
+
             checkout_branch(branch_name)
             update_branch(branch_name)
             pr_url = get_pr_url_for_branch(branch_name)
