@@ -77,7 +77,7 @@ def rebase_onto_branch(branch: str):
     print(f"Pushing branches: {branches}")
     command = ["git", "push", "--force-with-lease", "origin"] + branches
     result = run_command(command, check=True)
-    print(f"{result.stdout }\n{ result.stderr }")
+    print(f"{result.stdout}\n{result.stderr}")
 
 
 def update_stack(commits: list[str]) -> list[str]:
