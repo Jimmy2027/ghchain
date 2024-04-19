@@ -166,7 +166,7 @@ def update_pr_descriptions(run_tests: Optional[Tuple[str, str]], pr_stack):
                 updated_body = re.sub(
                     f"{WORKFLOW_BADGES_START_MARKER}.*?{WORKFLOW_BADGES_END_MARKER}",
                     workflow_str,
-                    current_body,
+                    updated_body,
                     flags=re.DOTALL,
                 )
             else:
