@@ -24,7 +24,7 @@ def run_workflows(workflow_ids: list[str], branch: str) -> list[str]:
     click.echo(f"Running workflows for branch {branch}...")
     md_badges = []
     for workflow_id in workflow_ids:
-        command = ["gh", "workflow", "run", f"{ workflow_id }.yml", "--ref", branch]
+        command = ["gh", "workflow", "run", f"{workflow_id}.yml", "--ref", branch]
         result = run_command(
             command,
             check=True,
@@ -33,7 +33,7 @@ def run_workflows(workflow_ids: list[str], branch: str) -> list[str]:
         repo_url = get_repo_url()
 
         workflow_overview_url = (
-            f"{repo_url}/actions/workflows/{workflow_id}.yml?query=branch%3A{ branch }"
+            f"{repo_url}/actions/workflows/{workflow_id}.yml?query=branch%3A{branch}"
         )
 
         md_badges.append(
@@ -286,7 +286,7 @@ class WorkflowStatus:
                 "run",
                 "list",
                 "--workflow",
-                f"{ workflow_yml_fn }.yml",
+                f"{workflow_yml_fn}.yml",
                 "-b",
                 branchname,
             ],
@@ -425,7 +425,7 @@ class StatusRow:
             "bright_green" if self.review_decision == "APPROVED" else "default"
         )
         return [
-            f"[bold gray]{ self.branch }[/]\n\t{ self.title }",
+            f"[bold gray]{self.branch}[/]\n\t{self.title}",
             str(self.pr_id),
             f"[bold {review_decision_color}]{self.review_decision}[/]",
             str(self.is_draft),
