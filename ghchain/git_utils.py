@@ -27,7 +27,7 @@ def checkout_branch(branch_name: str):
 
 
 def update_branch(branch_name: str):
-    subprocess.run(["git", "pull", "origin", branch_name])
+    return run_command(["git", "pull", "origin", branch_name])
 
 
 def update_base_branch(base_branch: str):
@@ -35,8 +35,49 @@ def update_base_branch(base_branch: str):
     Update the base branch with the latest changes from origin
     """
     checkout_branch(base_branch)
-    update_branch(base_branch)
+    result = update_branch(base_branch)
+
+    if "Already up to date" not in result.stdout:
+        click.echo("Changes pulled from origin. Rebasing stack.")
+        rebase_onto_branch(base_branch)
+        return
+
     subprocess.run(["git", "checkout", "-"])
+
+
+def rebase_onto_branch(branch: str):
+    result = run_command(
+        ["git", "rebase", "--update-refs", branch],
+    )
+
+    click.echo(f"Rebase command output: {result.stdout} {result.stderr}")
+
+    while any(e in result.stdout for e in ["CONFLICT", "needs merge"]):
+        click.echo(
+            "Conflicts detected during rebase. Please resolve them and then press Enter to continue."
+        )
+        input()
+        result = run_command(
+            ["git", "rebase", "--continue"],
+            env={
+                **os.environ,
+                "GIT_EDITOR": "true",
+            },  # to prevent the editor from opening
+            check=False,
+        )
+        print(f"Rebase command output: {result.stdout}\n{result.stderr}")
+
+    branches = [
+        line.strip().replace("refs/heads/", "")
+        for line in result.stderr.split("\n")
+        if line.strip() and "refs/heads/" in line and "Successfully rebased" not in line
+    ]
+
+    # push each branch to origin
+    print(f"Pushing branches: {branches}")
+    command = ["git", "push", "--force-with-lease", "origin"] + branches
+    result = run_command(command, check=True)
+    print(f"{result.stdout }\n{ result.stderr }")
 
 
 def update_stack(commits: list[str]) -> list[str]:
@@ -75,41 +116,6 @@ def get_git_base_dir() -> Path:
         ["git", "rev-parse", "--show-toplevel"], stdout=subprocess.PIPE, text=True
     )
     return Path(result.stdout.strip())
-
-
-def rebase_onto_branch(branch: str):
-    result = run_command(
-        ["git", "rebase", "--update-refs", branch],
-    )
-
-    click.echo(f"Rebase command output: {result.stdout}")
-
-    while any(e in result.stdout for e in ["CONFLICT", "needs merge"]):
-        click.echo(
-            "Conflicts detected during rebase. Please resolve them and then press Enter to continue."
-        )
-        input()
-        result = run_command(
-            ["git", "rebase", "--continue"],
-            env={
-                **os.environ,
-                "GIT_EDITOR": "true",
-            },  # to prevent the editor from opening
-            check=False,
-        )
-        print(f"Rebase command output: {result.stdout}\n{result.stderr}")
-
-    branches = [
-        line.strip().replace("refs/heads/", "")
-        for line in result.stderr.split("\n")
-        if line.strip() and "refs/heads/" in line and "Successfully rebased" not in line
-    ]
-
-    # push each branch to origin
-    print(f"Pushing branches: {branches}")
-    command = ["git", "push", "--force-with-lease", "origin"] + branches
-    result = run_command(command, check=True)
-    print(f"{ result.stdout }\n{ result.stderr }")
 
 
 def find_branches_with_commit(commit: str) -> list[str]:

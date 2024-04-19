@@ -1,5 +1,6 @@
 """Console script for ghchain."""
 
+from typing import Optional
 import click
 
 from ghchain.git_utils import (
@@ -58,7 +59,10 @@ pr_stack = []
 @click.option(
     "--rebase-onto",
     default=None,
-    help="Rebase the current branch onto another branch, using 'update-refs' and push every updated branch to the remote.",
+    help=(
+        "Rebase the current branch onto another branch, using 'update-refs'"
+        "and push every updated branch to the remote."
+    ),
 )
 def main(
     default_base_branch, draft, with_tests, rebase_onto, run_tests, status, live_status
@@ -94,6 +98,7 @@ def main(
         update_pr_descriptions(run_tests=(pr_url, branch_name), pr_stack=[pr_url])
         return
 
+    # TODO: if the base branch has been updated, we should update the stack
     update_base_branch(default_base_branch)
 
     stack = Stack.create(base_branch=default_base_branch)

@@ -1,34 +1,34 @@
 repos:
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.4.0
-    hooks:
-      # list of supported hooks: https://pre-commit.com/hooks.html
-      - id: trailing-whitespace
-      - id: check-yaml
-      - id: check-added-large-files
-      - id: debug-statements
-      - id: detect-private-key
+    - repo: https://github.com/pre-commit/pre-commit-hooks
+      rev: v4.4.0
+      hooks:
+          # list of supported hooks: https://pre-commit.com/hooks.html
+          - id: trailing-whitespace
+          - id: check-yaml
+          - id: check-added-large-files
+          - id: debug-statements
+          - id: detect-private-key
 
-  # yaml formatting - fails because of node js version:
-  - repo: https://github.com/pre-commit/mirrors-prettier
-    rev: v3.0.3
-    hooks:
-      - id: prettier
-        types: [yaml]
-        args: ["--bracket-spacing True"]
+    # yaml formatting - fails because of node js version:
+    - repo: https://github.com/pre-commit/mirrors-prettier
+      rev: v3.0.3
+      hooks:
+          - id: prettier
+            types: [yaml]
+            args: ["--bracket-spacing True"]
 
-  # python code analysis
-  - repo: https://github.com/PyCQA/flake8
-    rev: 6.1.0
-    hooks:
-      - id: flake8
-        # ignore "W503 line break before binary operator"
-        # ignore "E203 whitespace before ':'"
-        # ignore "E402 module level import not at top of file"
-        args: [--max-line-length=120, "--ignore=E203, E402, W503"]
+    # python code analysis
+    - repo: https://github.com/PyCQA/flake8
+      rev: 6.1.0
+      hooks:
+          - id: flake8
+            # ignore "W503 line break before binary operator"
+            # ignore "E203 whitespace before ':'"
+            # ignore "E402 module level import not at top of file"
+            args: [--max-line-length=120, "--ignore=E203, E402, W503"]
 
-  # jupyter notebook cell output clearing
-  - repo: https://github.com/kynan/nbstripout
-    rev: 0.6.1
-    hooks:
-      - id: nbstripout
+    # jupyter notebook cell output clearing
+    - repo: https://github.com/kynan/nbstripout
+      rev: 0.6.1
+      hooks:
+          - id: nbstripout

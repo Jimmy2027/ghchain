@@ -96,7 +96,7 @@ def test_ghchain(run_workflows):
 def test_rebase():
     # create the test stack, then checkout branch with commit 0 and amend no edit the commit
     # then run ghchain --rebase-onto mydev
-    result = create_test_stack(False)
+    create_test_stack(False)
     stack = Stack.create(base_branch="main")
     branch_to_change = stack.branches[3]
     change_stack_with_conflict(branch_to_change)
