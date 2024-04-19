@@ -1,0 +1,31 @@
+name: Example Workflow
+
+on: [push]
+
+jobs:
+    build:
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v2
+
+            - name: Set up Git
+              run: |
+                  git config user.name "GitHub Actions"
+                  git config user.email "hendrik.klug@synthara.ai"
+
+            - name: Make Changes
+              run: |
+                  git clone https://github.com/HendrikKlug-synthara/mytest.git
+                  git add hello.txt
+
+            - name: Commit and Push
+              run: |
+                  git add .
+                  git commit -m "Automated commit message"
+                  if git push --quiet "https://${{ secrets.PATSECRET }}@github.com/HendrikKlug-synthara/mytest.git"; then
+                      echo "Changes pushed"
+                  else
+                      echo "Failed to push changes"
+                  fi
