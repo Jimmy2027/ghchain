@@ -18,6 +18,7 @@ jobs:
             - name: Make Changes
               run: |
                   git clone https://github.com/HendrikKlug-synthara/mytest.git
+                  touch hello.txt
                   git add hello.txt
 
             - name: Commit and Push
