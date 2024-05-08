@@ -30,11 +30,6 @@ pr_stack = []
 
 
 @click.command()
-@click.option(
-    "--default-base-branch",
-    default="main",
-    help="Default base branch for the first PR.",
-)
 @click.option("--draft", is_flag=True, help="Create the pull request as a draft.")
 @click.option("--status", is_flag=True, help="Print the status of the PRs")
 @click.option(
@@ -65,9 +60,7 @@ pr_stack = []
         "and push every updated branch to the remote."
     ),
 )
-def main(
-    default_base_branch, draft, with_tests, rebase_onto, run_tests, status, live_status
-):
+def main(draft, with_tests, rebase_onto, run_tests, status, live_status):
     """
     From your dev branch, gather all commits that are not in the default base branch (main).
     For each commit, create a new branch based on the previous branch with the next commit,
@@ -77,6 +70,7 @@ def main(
     Update a commit in the stack: git commit --amend --no-edit on the branch with the commit.
     Then from your dev branch, run `ghchain --rebase-onto <branch>`
     """
+    default_base_branch = config.base_branch
     if rebase_onto:
         rebase_onto_branch(rebase_onto)
         return

@@ -11,6 +11,7 @@ from ghchain.git_utils import get_git_base_dir
 class Config:
     workflows: list[str]
     git_username: str
+    base_branch: str = "main"
     branch_name_template: str = "{git_config_author}-{pr_id}"
 
     @classmethod
