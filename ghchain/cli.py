@@ -21,6 +21,7 @@ from ghchain.github_utils import (
     get_latest_pr_id,
     get_pr_url_for_branch,
     print_status,
+    run_tests_on_pr,
     update_pr_descriptions,
 )
 from ghchain.config import config
@@ -95,7 +96,7 @@ def main(
         if not pr_url:
             click.echo(f"No open PR found for branch '{branch_name}'.")
             return
-        update_pr_descriptions(run_tests=(pr_url, branch_name), pr_stack=[pr_url])
+        run_tests_on_pr(pr_url, branch_name)
         return
 
     # TODO: if the base branch has been updated, we should update the stack

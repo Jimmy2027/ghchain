@@ -143,6 +143,32 @@ def update_pr_stacklist_description(current_body, pr_url, pr_stack) -> str:
     return updated_body
 
 
+def run_tests_on_pr(pr_url: str, branch: str):
+    md_badges = run_workflows(config.workflows, branch)
+    workflow_string = get_workflow_pr_string(md_badges)
+
+    current_body = get_pr_body(pr_url.split("/")[-1])
+
+    if (
+        WORKFLOW_BADGES_START_MARKER in current_body
+        and WORKFLOW_BADGES_END_MARKER in current_body
+    ):
+        updated_body = re.sub(
+            f"{WORKFLOW_BADGES_START_MARKER}.*?{WORKFLOW_BADGES_END_MARKER}",
+            workflow_string,
+            current_body,
+            flags=re.DOTALL,
+        )
+    else:
+        updated_body = f"{current_body}\n{workflow_string}"
+
+    subprocess.run(
+        ["gh", "pr", "edit", pr_url.split("/")[-1], "--body", updated_body],
+        check=True,
+    )
+    click.echo(f"PR description updated for PR {pr_url}.")
+
+
 def update_pr_descriptions(run_tests: Optional[Tuple[str, str]], pr_stack):
     """
     Update all PRs in the stack with the full stack list in their descriptions, highlighting the current PR.
@@ -156,21 +182,7 @@ def update_pr_descriptions(run_tests: Optional[Tuple[str, str]], pr_stack):
         updated_body = update_pr_stacklist_description(current_body, pr_url, pr_stack)
 
         if run_tests and run_tests[0] == pr_url:
-            md_badges = run_workflows(config.workflows, run_tests[1])
-            workflow_str = get_workflow_pr_string(md_badges)
-
-            if (
-                WORKFLOW_BADGES_START_MARKER in current_body
-                and WORKFLOW_BADGES_END_MARKER in current_body
-            ):
-                updated_body = re.sub(
-                    f"{WORKFLOW_BADGES_START_MARKER}.*?{WORKFLOW_BADGES_END_MARKER}",
-                    workflow_str,
-                    updated_body,
-                    flags=re.DOTALL,
-                )
-            else:
-                updated_body += f"\n{workflow_str}"
+            run_tests_on_pr(pr_url, run_tests[1])
 
         subprocess.run(
             ["gh", "pr", "edit", current_pr_number, "--body", updated_body],
