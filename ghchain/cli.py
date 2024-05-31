@@ -120,6 +120,7 @@ def main(
         click.echo("No commits found that are not in main.")
         return
 
+    pr_created = False
     for commit_sha, commit_msg in stack.commit2message.items():
         click.echo(f"Processing commit: {commit_sha} - {commit_msg}")
         if commit_sha in stack.commits_without_branch:
@@ -137,6 +138,7 @@ def main(
                 draft=draft,
                 run_tests=with_tests,
             )
+            pr_created = True
         else:
             branch_name: Optional[str] = stack.commit2branch(commit_sha)
             if not branch_name:
@@ -155,7 +157,7 @@ def main(
                 pr_stack=pr_stack,
             )
             default_base_branch = branch_name
-        if not click.confirm(
+        if pr_created and not click.confirm(
             "Do you want to continue with the next commit?", default=True
         ):
             break
