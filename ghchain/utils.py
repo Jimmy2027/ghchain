@@ -5,7 +5,7 @@ import click
 
 
 def run_command(
-    command, check=False, env: Optional[dict] = None
+    command, check=False, env: Optional[dict] = None, shell=False
 ) -> subprocess.CompletedProcess:
     try:
         result = subprocess.run(
@@ -13,6 +13,7 @@ def run_command(
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            shell=shell,
             check=check,
             env=env,
         )

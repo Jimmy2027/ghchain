@@ -60,7 +60,23 @@ pr_stack = []
         "and push every updated branch to the remote."
     ),
 )
-def main(draft, with_tests, rebase_onto, run_tests, status, live_status):
+@click.option(
+    "--interactive-rebase-onto",
+    default=None,
+    help=(
+        "Rebase the current branch onto another branch interactively, using 'update-refs'"
+        "and push every updated branch to the remote."
+    ),
+)
+def main(
+    draft,
+    with_tests,
+    rebase_onto,
+    interactive_rebase_onto,
+    run_tests,
+    status,
+    live_status,
+):
     """
     From your dev branch, gather all commits that are not in the default base branch (main).
     For each commit, create a new branch based on the previous branch with the next commit,
@@ -71,9 +87,11 @@ def main(draft, with_tests, rebase_onto, run_tests, status, live_status):
     Then from your dev branch, run `ghchain --rebase-onto <branch>`
     """
     default_base_branch = config.base_branch
-    if rebase_onto:
-        rebase_onto_branch(rebase_onto)
-        return
+    if interactive_rebase_onto:
+        # assert False, f"Not yet implemented."
+        return rebase_onto_branch(interactive_rebase_onto, interactive=True)
+    elif rebase_onto:
+        return rebase_onto_branch(rebase_onto)
 
     if status or live_status:
         print_status(base_branch=default_base_branch, live=live_status)

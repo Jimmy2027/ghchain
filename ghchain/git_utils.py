@@ -45,27 +45,36 @@ def update_base_branch(base_branch: str):
     subprocess.run(["git", "checkout", "-"])
 
 
-def rebase_onto_branch(branch: str):
-    result = run_command(
-        ["git", "rebase", "--update-refs", branch],
-    )
+def rebase_onto_branch(branch: str, interactive: bool = False):
+    rebase_command = ["git", "rebase", "--update-refs", branch]
+    if interactive:
+        rebase_command.insert(2, "--interactive")
+        rebase_command = " ".join(rebase_command)
+        result = subprocess.run(
+            rebase_command, shell=True, stderr=subprocess.PIPE, text=True
+        )
+
+    else:
+        # don't check because otherwise it raises an error when there are conflicts
+        result = run_command(rebase_command, shell=interactive, check=False)
 
     click.echo(f"Rebase command output: {result.stdout} {result.stderr}")
 
-    while any(e in result.stdout for e in ["CONFLICT", "needs merge"]):
-        click.echo(
-            "Conflicts detected during rebase. Please resolve them and then press Enter to continue."
-        )
-        input()
-        result = run_command(
-            ["git", "rebase", "--continue"],
-            env={
-                **os.environ,
-                "GIT_EDITOR": "true",
-            },  # to prevent the editor from opening
-            check=False,
-        )
-        print(f"Rebase command output: {result.stdout}\n{result.stderr}")
+    if result.stdout:
+        while any(e in result.stdout for e in ["CONFLICT", "needs merge"]):
+            click.echo(
+                "Conflicts detected during rebase. Please resolve them and then press Enter to continue."
+            )
+            input()
+            result = run_command(
+                ["git", "rebase", "--continue"],
+                env={
+                    **os.environ,
+                    "GIT_EDITOR": "true",
+                },  # to prevent the editor from opening
+                check=False,
+            )
+            print(f"Rebase command output: {result.stdout}\n{result.stderr}")
 
     branches = [
         line.strip().replace("refs/heads/", "")
