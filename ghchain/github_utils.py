@@ -1,17 +1,10 @@
 import json
 import re
-import subprocess
-from dataclasses import dataclass
-import time
-from typing import Optional, Tuple
-from rich.live import Live
+from typing import Optional
 
 import click
-from rich.console import Console
-from rich.table import Table
 
-from ghchain.config import config
-from ghchain.git_utils import Stack
+from ghchain.config import config, logger
 from ghchain.utils import run_command
 
 STACK_LIST_START_MARKER = "<!-- STACK_LIST_START -->"
@@ -21,7 +14,7 @@ WORKFLOW_BADGES_END_MARKER = "<!-- WORKFLOW_BADGES_END -->"
 
 
 def run_workflows(workflow_ids: list[str], branch: str) -> list[str]:
-    click.echo(f"Running workflows for branch {branch}...")
+    logger.info(f"Running workflows for branch {branch}...")
     md_badges = []
     for workflow_id in workflow_ids:
         command = ["gh", "workflow", "run", f"{workflow_id}.yml", "--ref", branch]
@@ -29,7 +22,7 @@ def run_workflows(workflow_ids: list[str], branch: str) -> list[str]:
             command,
             check=True,
         )
-        print(result.stdout)
+        logger.debug(result.stdout)
         repo_url = get_repo_url()
 
         workflow_overview_url = (
@@ -56,14 +49,8 @@ def get_repo_url() -> str:
     return [e for e in repo_url_result.stdout.strip().split('"') if "https" in e][0]
 
 
-def create_pull_request(
-    base_branch, head_branch, title, body, draft=False, run_tests=False
-):
-    if run_tests:
-        md_badges = run_workflows(config.workflows, head_branch)
-
-        workflow_string = get_workflow_pr_string(md_badges)
-        body += f"\n{workflow_string}"
+def create_pull_request(base_branch, head_branch, title, body, draft=False):
+    logger.info(f"Creating pull request from {head_branch} to {base_branch}.")
 
     command = [
         "gh",
@@ -162,29 +149,30 @@ def run_tests_on_pr(pr_url: str, branch: str):
     else:
         updated_body = f"{current_body}\n{workflow_string}"
 
-    subprocess.run(
+    run_command(
         ["gh", "pr", "edit", pr_url.split("/")[-1], "--body", updated_body],
         check=True,
     )
     click.echo(f"PR description updated for PR {pr_url}.")
 
 
-def update_pr_descriptions(run_tests: Optional[Tuple[str, str]], pr_stack):
+def update_pr_descriptions(pr_stack: list[str]):
     """
     Update all PRs in the stack with the full stack list in their descriptions, highlighting the current PR.
     run_tests is a tuple of the pr_url and the branch name.
     """
+    pr_url_to_id = {pr: pr.split("/")[-1] for pr in pr_stack}
+    prs_str = f"{', '.join([f'#{pr_url_to_id[pr_url]}' for pr_url in pr_stack])}"
+    logger.info(f"Updating PR descriptions of {prs_str}.")
+
     # TODO: check that I'm the author of the PR
     for pr_url in pr_stack:
-        current_pr_number = pr_url.split("/")[-1]
+        current_pr_number = pr_url_to_id[pr_url]
         current_body = get_pr_body(current_pr_number)
 
         updated_body = update_pr_stacklist_description(current_body, pr_url, pr_stack)
 
-        if run_tests and run_tests[0] == pr_url:
-            run_tests_on_pr(pr_url, run_tests[1])
-
-        subprocess.run(
+        run_command(
             ["gh", "pr", "edit", current_pr_number, "--body", updated_body],
             check=True,
         )
@@ -193,40 +181,32 @@ def update_pr_descriptions(run_tests: Optional[Tuple[str, str]], pr_stack):
 
 
 def get_branch_name_for_pr_id(pr_id) -> Optional[str]:
-    result = subprocess.run(
+    result = run_command(
         ["gh", "pr", "list", "--json", "headRefName,number", "--state", "open"],
-        stdout=subprocess.PIPE,
-        text=True,
     )
     prs = json.loads(result.stdout)
     return next((pr["headRefName"] for pr in prs if pr["number"] == pr_id), None)
 
 
 def get_pr_url_for_branch(branch_name) -> Optional[str]:
-    result = subprocess.run(
+    result = run_command(
         ["gh", "pr", "list", "--json", "url,headRefName", "--state", "open"],
-        stdout=subprocess.PIPE,
-        text=True,
     )
     prs = json.loads(result.stdout)
     return next((pr["url"] for pr in prs if pr["headRefName"] == branch_name), None)
 
 
 def get_pr_url_for_id(pr_id) -> Optional[str]:
-    result = subprocess.run(
+    result = run_command(
         ["gh", "pr", "list", "--json", "url,number", "--state", "open"],
-        stdout=subprocess.PIPE,
-        text=True,
     )
     prs = json.loads(result.stdout)
     return next((pr["url"] for pr in prs if pr["number"] == pr_id), None)
 
 
 def get_latest_pr_id() -> int:
-    result = subprocess.run(
+    result = run_command(
         ["gh", "pr", "list", "--json", "number", "--state", "all"],
-        stdout=subprocess.PIPE,
-        text=True,
     )
     prs = json.loads(result.stdout)
 
@@ -257,259 +237,3 @@ def get_pr_isdraft(pr_id) -> bool:
         ["gh", "pr", "view", pr_id, "--json", "isDraft"],
     )
     return json.loads(result.stdout)["isDraft"]
-
-
-@dataclass
-class WorkflowStatus:
-    status: str
-    conclusion: str
-    name: str
-    branch: str
-    commit: str
-    event: str
-    id: str
-    elapsed: str
-    timestamp: str
-    workflow_yml_fn: str
-
-    @classmethod
-    def from_line(cls, line: str, workflow_yml_fn: str):
-        status, conclusion, name, branch, commit, event, id, elapsed, timestamp = (
-            line.split("\t")
-        )
-        return cls(
-            status=status,
-            conclusion=conclusion,
-            name=name,
-            branch=branch,
-            commit=commit,
-            event=event,
-            id=id,
-            elapsed=elapsed,
-            timestamp=timestamp,
-            workflow_yml_fn=workflow_yml_fn,
-        )
-
-    @classmethod
-    def create(cls, workflow_yml_fn: str, branchname: str):
-        result = run_command(
-            [
-                "gh",
-                "run",
-                "list",
-                "--workflow",
-                f"{workflow_yml_fn}.yml",
-                "-b",
-                branchname,
-            ],
-            check=True,
-        )
-        lines = result.stdout.splitlines()
-        if lines:
-            line = result.stdout.splitlines()[0]
-            return WorkflowStatus.from_line(line, workflow_yml_fn)
-        return None
-
-
-@dataclass
-class StatusCheck:
-    completedAt: str
-    conclusion: str
-    detailsUrl: str
-    name: str
-    startedAt: str
-    status: str
-    workflowName: str
-
-
-@dataclass
-class PrStatus:
-    branchname: str
-    pr_id: int
-    review_decision: bool
-    is_draft: bool
-    is_mergeable: bool
-    title: str
-    workflow_statuses: Optional[list[WorkflowStatus]] = None
-    status_checks: Optional[dict[str, StatusCheck]] = None
-
-    @classmethod
-    def from_branchname(cls, branchname: str):
-        pr_id = get_pr_id_for_branch(branchname)
-        if not pr_id:
-            return None
-        workflow_statuses = []
-        for workflow in config.workflows:
-            workflow_statuses.append(WorkflowStatus.create(workflow, branchname))
-
-        # TODO: add statusCheckRollup
-        result = run_command(
-            [
-                "gh",
-                "pr",
-                "view",
-                pr_id,
-                "--json",
-                "reviewDecision,isDraft,mergeable,statusCheckRollup,title",
-            ],
-        )
-        result_dict = json.loads(result.stdout)
-
-        return cls(
-            branchname=branchname,
-            pr_id=int(pr_id),
-            workflow_statuses=workflow_statuses,
-            review_decision=result_dict["reviewDecision"],
-            is_draft=result_dict["isDraft"],
-            is_mergeable=result_dict["mergeable"],
-            status_checks={
-                status["name"]: StatusCheck(
-                    **{
-                        k: V
-                        for k, V in status.items()
-                        if k in StatusCheck.__annotations__
-                    }
-                )
-                for status in result_dict["statusCheckRollup"]
-            }
-            if result_dict["statusCheckRollup"]
-            else None,
-            title=result_dict["title"],
-        )
-
-
-@dataclass
-class StatusRow:
-    branch: str
-    pr_id: int
-    review_decision: Optional[str]
-    is_draft: bool
-    workflow_status: str
-    status_checks: str
-    title: str
-
-    @staticmethod
-    def status2color(status: str, conclusion: str):
-        status = status.lower()
-        conclusion = conclusion.lower()
-
-        if conclusion == "success":
-            return "bright_green"
-        elif status in ["queued", "in_progress"] or conclusion == "neutral":
-            return "yellow"
-        else:
-            return "bright_red"
-
-    @classmethod
-    def from_pr_status(cls, pr_status: PrStatus):
-        workflow_status_str = ""
-        for workflow_status in pr_status.workflow_statuses:
-            if workflow_status:
-                color = cls.status2color(
-                    workflow_status.status, workflow_status.conclusion
-                )
-                workflow_status_str += (
-                    f"[bold {color}]{workflow_status.workflow_yml_fn}[/]:"
-                    " {workflow_status.status, workflow_status.conclusion}\n"
-                )
-
-        status_check_str = ""
-        if pr_status.status_checks:
-            for status_check in pr_status.status_checks.values():
-                color = cls.status2color(status_check.status, status_check.conclusion)
-                status_check_str += (
-                    f"[bold {color}]{status_check.name}[/]:"
-                    " {status_check.status, status_check.conclusion}\n"
-                )
-
-        return cls(
-            branch=pr_status.branchname,
-            pr_id=pr_status.pr_id,
-            review_decision=pr_status.review_decision,
-            is_draft=pr_status.is_draft,
-            workflow_status=workflow_status_str,
-            status_checks=status_check_str,
-            title=pr_status.title,
-        )
-
-    def to_row(self):
-        review_decision_color = (
-            "bright_green" if self.review_decision == "APPROVED" else "default"
-        )
-        return [
-            f"[bold gray]{self.branch}[/]\n\t{self.title}",
-            str(self.pr_id),
-            f"[bold {review_decision_color}]{self.review_decision}[/]",
-            str(self.is_draft),
-            self.workflow_status,
-            self.status_checks,
-        ]
-
-
-@dataclass
-class StackStatus:
-    pr_statuses: list[PrStatus]
-    stack: Optional[Stack] = None
-
-    @classmethod
-    def from_stack(cls, stack: Stack):
-        pr_statuses = []
-        for branch in stack.branches:
-            pr_statuses.append(PrStatus.from_branchname(branch))
-
-        return cls(pr_statuses=pr_statuses, stack=stack)
-
-    def create_table_data(self):
-        table_data = []
-
-        for pr_status in self.pr_statuses:
-            if not pr_status:
-                continue
-
-            table_data.append(StatusRow.from_pr_status(pr_status).to_row())
-
-        return table_data
-
-    def get_status_table(self):
-        table = Table(show_header=True, header_style="bold magenta")
-        table.add_column("Branch", style="dim", width=30)
-        table.add_column("PR ID", style="dim", width=6)
-        table.add_column("Review Decision", style="dim", width=20)
-        table.add_column("Draft", style="dim", width=8)
-        table.add_column("Workflow Status", style="dim", width=30)
-        table.add_column("Status Checks", style="dim", width=30)  # New column
-
-        table_data = self.create_table_data()
-
-        for i, row in enumerate(table_data):
-            table.add_row(*row)
-            # add a divider between rows, except for the last row
-            if i < len(table_data) - 1:
-                table.add_row("-----", "-----", "-----", "-----", "-----", "-----")
-
-        return table
-
-    def print_status(self):
-        console = Console()
-        console.print(self.get_status_table())
-
-
-def print_status(base_branch: str = "main", live: bool = False):
-    if live:
-        with Live(
-            StackStatus.from_stack(
-                Stack.create(base_branch=base_branch)
-            ).get_status_table(),
-            refresh_per_second=1,
-        ) as live_context:
-            while True:
-                time.sleep(60)
-                live_context.console.clear()
-                live_context.update(
-                    StackStatus.from_stack(
-                        Stack.create(base_branch=base_branch)
-                    ).get_status_table()
-                )
-        return
-    StackStatus.from_stack(Stack.create(base_branch=base_branch)).print_status()
-    return

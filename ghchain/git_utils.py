@@ -11,7 +11,7 @@ from ghchain.utils import run_command
 
 
 def get_all_branches() -> list[str]:
-    result = subprocess.run(["git", "branch"], stdout=subprocess.PIPE, text=True)
+    result = run_command(["git", "branch"])
     branches = result.stdout.splitlines()
     # Remove the leading '*' from the current branch and strip leading/trailing whitespace
     branches = [branch.replace("*", "").strip() for branch in branches]
@@ -19,11 +19,11 @@ def get_all_branches() -> list[str]:
 
 
 def git_push(branch_name: str):
-    subprocess.run(["git", "push", "origin", branch_name])
+    run_command(["git", "push", "origin", branch_name])
 
 
 def checkout_branch(branch_name: str):
-    subprocess.run(["git", "checkout", branch_name])
+    run_command(["git", "checkout", branch_name])
 
 
 def update_branch(branch_name: str):
@@ -42,7 +42,7 @@ def update_base_branch(base_branch: str):
         rebase_onto_branch(base_branch)
         return
 
-    subprocess.run(["git", "checkout", "-"])
+    run_command(["git", "checkout", "-"])
 
 
 def rebase_onto_branch(branch: str, interactive: bool = False):
@@ -99,15 +99,12 @@ def update_stack(commits: list[str]) -> list[str]:
     stack_top = stack.pop(0)
 
     for branch in stack:
-        subprocess.run(["git", "checkout", branch])
-        subprocess.run(["git", "pull", "origin", branch])
+        run_command(["git", "checkout", branch])
+        run_command(["git", "pull", "origin", branch])
 
-        subprocess.run(["git", "checkout", stack_top])
-        result = subprocess.run(
+        run_command(["git", "checkout", stack_top])
+        result = run_command(
             ["git", "rebase", "--update-refs", branch],
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
         )
         if "fatal" in result.stdout:
             print(
@@ -116,13 +113,13 @@ def update_stack(commits: list[str]) -> list[str]:
             input()
 
     for branch in stack:
-        subprocess.run(["git", "checkout", branch])
-        subprocess.run(["git", "push", "--force-with-lease", "origin", branch])
+        run_command(["git", "checkout", branch])
+        run_command(["git", "push", "--force-with-lease", "origin", branch])
 
 
 def get_git_base_dir() -> Path:
-    result = subprocess.run(
-        ["git", "rev-parse", "--show-toplevel"], stdout=subprocess.PIPE, text=True
+    result = run_command(
+        ["git", "rev-parse", "--show-toplevel"]
     )
     return Path(result.stdout.strip())
 
