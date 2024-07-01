@@ -291,6 +291,10 @@ def get_commits_not_in_base_branch(
         return commits
 
 
+def create_branch_from_commit(branch_name, commit_sha):
+    run_command(["git", "branch", branch_name, commit_sha])
+
+
 def checkout_new_branch(branch_name, commit_sha):
     run_command(["git", "checkout", "-b", branch_name, commit_sha])
 

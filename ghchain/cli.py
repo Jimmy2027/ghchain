@@ -8,12 +8,11 @@ from ghchain.config import config, logger
 from ghchain.git_utils import (
     Stack,
     checkout_branch,
-    checkout_new_branch,
+    create_branch_from_commit,
     create_branch_name,
     get_current_branch,
     git_push,
     rebase_onto_branch,
-    set_upstream_to_origin,
     update_base_branch,
     update_branch,
 )
@@ -181,8 +180,7 @@ def handle_new_branch(commit_sha, commit_msg, draft, with_tests, base_branch: st
         config.branch_name_template, get_latest_pr_id() + 1
     )
     logger.info(f"Creating new branch for commit {commit_sha}: {branch_name}")
-    checkout_new_branch(branch_name, commit_sha)
-    set_upstream_to_origin(branch_name)
+    create_branch_from_commit(branch_name, commit_sha)
     git_push(branch_name)
     pr_url = create_pull_request(
         base_branch=base_branch,
