@@ -1,13 +1,45 @@
-from dataclasses import dataclass
 import os
 import subprocess
 from collections import defaultdict
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Union
 
 import click
 
 from ghchain.utils import run_command
+
+
+def parse_git_show_ref(output: str) -> dict:
+    """
+    Parse the output of 'git show-ref --head --dereference' into a dictionary.
+
+    Parameters:
+        output (str): The output string from the 'git show-ref --head --dereference' command.
+
+    Returns:
+        dict: A dictionary with commit hashes as keys and lists of reference names as values.
+    """
+    refs_dict = {}
+    for line in output.splitlines():
+        parts = line.split()
+        if len(parts) != 2:
+            continue  # skip lines that don't have exactly two parts
+        commit_hash, ref_name = parts
+
+        # Skip non-branch references
+        if "heads" not in ref_name:
+            continue
+
+        if commit_hash not in refs_dict:
+            refs_dict[commit_hash] = []
+        refs_dict[commit_hash].append(ref_name.replace("refs/heads/", ""))
+    return refs_dict
+
+
+def get_refs_dict() -> dict:
+    result = run_command(["git", "show-ref", "--head", "--dereference"])
+    return parse_git_show_ref(result.stdout)
 
 
 def get_all_branches() -> list[str]:
@@ -118,10 +150,12 @@ def update_stack(commits: list[str]) -> list[str]:
 
 
 def get_git_base_dir() -> Path:
-    result = run_command(
-        ["git", "rev-parse", "--show-toplevel"]
-    )
+    result = run_command(["git", "rev-parse", "--show-toplevel"])
     return Path(result.stdout.strip())
+
+
+def find_ref_branches_of_commit(refs: dict, commit: str) -> list[str]:
+    return refs.get(commit, [])
 
 
 def find_branches_with_commit(commit: str) -> list[str]:
@@ -145,12 +179,13 @@ class Stack:
     @classmethod
     def create(cls, base_branch: str):
         dev_branch = get_current_branch()
+        refs = get_refs_dict()
         commit2message = {
             e[0]: e[1] for e in get_commits_not_in_base_branch(base_branch)
         }
         commits = list(commit2message)
         commit2branch = {
-            commit: set(find_branches_with_commit(commit)) for commit in commits
+            commit: set(find_ref_branches_of_commit(refs, commit)) for commit in commits
         }
 
         return cls(commits, commit2message, commit2branch, dev_branch=dev_branch)
@@ -267,5 +302,8 @@ def set_upstream_to_origin(branch_name):
 
 
 def get_current_branch() -> str:
-    result = run_command(["git", "rev-parse", "--abbrev-ref", "HEAD"])
-    return result.stdout.strip()
+    """
+    Get the current branch name.
+    """
+    result = subprocess.run(["git", "branch", "--show-current"], capture_output=True)
+    return result.stdout.decode().strip()
