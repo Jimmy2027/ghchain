@@ -4,6 +4,8 @@
 
 from pathlib import Path
 
+from ghchain.status import print_status
+
 
 my_test_repo = Path("~/ssrc/mytest").expanduser()
 import os
@@ -22,7 +24,7 @@ from ghchain.git_utils import (
     get_all_branches,
     rebase_onto_branch,
 )
-from ghchain.github_utils import print_status
+# from ghchain.github_utils import print_status
 
 dev_branch = "mydev"
 
@@ -69,9 +71,9 @@ def create_test_stack(run_workflows=False):
 
     runner = CliRunner()
     if run_workflows:
-        return runner.invoke(cli.main, ["--with-tests"])
+        return runner.invoke(cli.process_commits, ["--with-tests"])
     else:
-        return runner.invoke(cli.main)
+        return runner.invoke(cli.process_commits)
 
 
 def change_stack_with_conflict(branch_to_change):

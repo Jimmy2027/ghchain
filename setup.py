@@ -34,7 +34,7 @@ setup(
     description="Chain pull requests from your devbranch's commits.",
     entry_points={
         "console_scripts": [
-            "ghchain=ghchain.cli:main",
+            "ghchain=ghchain.cli:ghchain_cli",
         ],
     },
     install_requires=requirements,
