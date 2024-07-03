@@ -1,13 +1,11 @@
 import os
 import subprocess
 from collections import defaultdict
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Optional, Union
+from typing import Union
 
 import click
 
-from ghchain.utils import run_command
+from ghchain.utils import logger, run_command
 
 
 def parse_git_show_ref(output: str) -> dict:
@@ -51,7 +49,7 @@ def get_all_branches() -> list[str]:
 
 
 def git_push(branch_name: str):
-    run_command(["git", "push", "origin", branch_name])
+    run_command(["git", "push", "origin", branch_name], check=True)
 
 
 def checkout_branch(branch_name: str):
@@ -71,14 +69,39 @@ def update_base_branch(base_branch: str):
 
     if "Already up to date" not in result.stdout:
         click.echo("Changes pulled from origin. Rebasing stack.")
-        rebase_onto_branch(base_branch)
+        rebase_onto_target(base_branch)
         return
 
     run_command(["git", "checkout", "-"])
 
 
-def rebase_onto_branch(branch: str, interactive: bool = False):
-    rebase_command = ["git", "rebase", "--update-refs", branch]
+def rebase_onto_target(target: str, interactive: bool = False) -> None:
+    """
+    Rebase the current branch onto a specified target branch or commit hash.
+
+    This function rebases the current branch onto the target specified by the `target` parameter.
+    If the `interactive` parameter is set to True, the rebase will be performed interactively.
+
+    Args:
+        target (str): The target branch or commit hash to rebase onto.
+        interactive (bool, optional): Flag to perform an interactive rebase. Defaults to False.
+
+    The function executes the rebase command using subprocess. If the rebase is interactive, it constructs
+    the command accordingly and executes it with `shell=True`. In case of non-interactive rebase, it calls
+    `run_command` with the constructed command.
+
+    During the rebase, if conflicts are detected (indicated by "CONFLICT" or "needs merge" in the command output),
+    the user is prompted to resolve them. After resolving conflicts, pressing Enter continues the rebase process.
+
+    After a successful rebase, the function extracts the names of branches that were rebased (if any are reported
+    in the stderr output) and pushes them to the remote repository using `--force-with-lease` to ensure safety.
+
+    Note:
+        - The `GIT_EDITOR` environment variable is set to "true" to prevent the editor from opening during
+          `git rebase --continue`
+
+    """
+    rebase_command = ["git", "rebase", "--update-refs", target]
     if interactive:
         rebase_command.insert(2, "--interactive")
         rebase_command = " ".join(rebase_command)
@@ -115,43 +138,9 @@ def rebase_onto_branch(branch: str, interactive: bool = False):
     ]
 
     # push each branch to origin
-    print(f"Pushing branches: {branches}")
+    logger.info(f"Pushing branches: {branches}")
     command = ["git", "push", "--force-with-lease", "origin"] + branches
-    result = run_command(command, check=True)
-    print(f"{result.stdout}\n{result.stderr}")
-
-
-def update_stack(commits: list[str]) -> list[str]:
-    """
-    Update the stack with the new commits
-    """
-    stack = get_stack(commits)
-    stack.append("main")
-
-    stack_top = stack.pop(0)
-
-    for branch in stack:
-        run_command(["git", "checkout", branch])
-        run_command(["git", "pull", "origin", branch])
-
-        run_command(["git", "checkout", stack_top])
-        result = run_command(
-            ["git", "rebase", "--update-refs", branch],
-        )
-        if "fatal" in result.stdout:
-            print(
-                "Conflicts detected during rebase. Please resolve them and then press Enter to continue."
-            )
-            input()
-
-    for branch in stack:
-        run_command(["git", "checkout", branch])
-        run_command(["git", "push", "--force-with-lease", "origin", branch])
-
-
-def get_git_base_dir() -> Path:
-    result = run_command(["git", "rev-parse", "--show-toplevel"])
-    return Path(result.stdout.strip())
+    run_command(command, check=True)
 
 
 def find_ref_branches_of_commit(refs: dict, commit: str) -> list[str]:
@@ -166,70 +155,6 @@ def find_branches_with_commit(commit: str) -> list[str]:
         if branch
     ]
     return branches
-
-
-@dataclass
-class Stack:
-    commits: list[str]
-    commit2message: dict[str, str]
-    commit2branches: dict[str, set[str]]
-    dev_branch: str
-    base_branch: str = "main"
-
-    @classmethod
-    def create(cls, base_branch: str):
-        dev_branch = get_current_branch()
-        refs = get_refs_dict()
-        commit2message = {
-            e[0]: e[1] for e in get_commits_not_in_base_branch(base_branch)
-        }
-        commits = list(commit2message)
-        commit2branch = {
-            commit: set(find_ref_branches_of_commit(refs, commit)) for commit in commits
-        }
-
-        return cls(commits, commit2message, commit2branch, dev_branch=dev_branch)
-
-    def commit2branch(self, commit: str) -> Optional[str]:
-        # return the branch for which the commit is the latest commit
-        return next(
-            (
-                branch
-                for branch, commits in self.branch2commits.items()
-                if commit == commits[-1]
-            ),
-            None,
-        )
-
-    @property
-    def branch2commits(self) -> dict[str, list[str]]:
-        return {
-            branch: get_commits_not_in_base_branch(
-                self.base_branch, target_branch=branch, only_sha=True
-            )
-            for branch in set(
-                b for branches in self.commit2branches.values() for b in branches
-            )
-        }
-
-    @property
-    def branches(self) -> list[str]:
-        branch_commit_counts = {
-            branch: len(commits) for branch, commits in self.branch2commits.items()
-        }
-        sorted_branches = sorted(
-            branch_commit_counts, key=branch_commit_counts.get, reverse=True
-        )
-
-        return sorted_branches
-
-    @property
-    def commits_without_branch(self) -> list[str]:
-        return [
-            commit
-            for commit, branches in self.commit2branches.items()
-            if not (branches - {self.dev_branch})
-        ]
 
 
 def get_stack(commits: list[str], dev_branch: str) -> list[str]:

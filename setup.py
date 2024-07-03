@@ -10,11 +10,10 @@ with open("README.md") as readme_file:
 requirements = [
     "Click>=7.0",
     "rich",
+    "loguru",
 ]
 
-test_requirements = [
-    "pytest>=3",
-]
+test_requirements = ["pytest>=3", "pytest-order"]
 
 setup(
     author="Hendrik Klug",
@@ -34,7 +33,7 @@ setup(
     description="Chain pull requests from your devbranch's commits.",
     entry_points={
         "console_scripts": [
-            "ghchain=ghchain.cli:main",
+            "ghchain=ghchain.cli:ghchain_cli",
         ],
     },
     install_requires=requirements,

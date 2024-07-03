@@ -8,7 +8,7 @@ from rich.live import Live
 from rich.table import Table
 
 from ghchain.config import config
-from ghchain.git_utils import Stack
+from ghchain.stack import Stack
 from ghchain.github_utils import get_pr_id_for_branch
 from ghchain.utils import run_command
 
