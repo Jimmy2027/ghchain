@@ -5,7 +5,7 @@ on:
     workflow_dispatch:
 
 env:
-    GH_TOKEN: ${{ secrets.NEW_PAT_TOKEN }}
+    GH_TOKEN: ${{ secrets.NEW_PAT_SECRET }}
 
 jobs:
     build:
