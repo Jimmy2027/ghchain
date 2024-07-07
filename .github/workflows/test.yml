@@ -21,6 +21,12 @@ jobs:
               run: |
                   pip install .
 
+            - name: Configure Git
+              run: |
+                git config --global user.name "github-actions[bot]"
+                git config --global user.email "github-actions[bot]@users.noreply.github.com"
+                git remote set-url origin https://x-access-token:${{ secrets.NEW_PAT_SECRET }}@github.com/HendrikKlug-synthara/mytest.git
+
             - name: Make Changes
               run: |
                   git clone https://github.com/HendrikKlug-synthara/mytest.git
@@ -31,8 +37,6 @@ jobs:
             - name: Commit and Push
               run: |
                   cd mytest
-                  git config user.name "GitHub Actions"
-                  git config user.email "hendrik.klug@synthara.ai"
                   git add .
                   git commit -m "Automated commit message"
                   git log
