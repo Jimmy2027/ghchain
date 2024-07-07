@@ -6,7 +6,7 @@ import pytest
 from click.testing import CliRunner
 
 from ghchain import cli
-from ghchain.config import CONFIG_FN, config, logger
+from ghchain.config import CONFIG_FN, config, get_git_base_dir, logger
 from ghchain.git_utils import get_all_branches
 
 
@@ -65,6 +65,7 @@ def test_create_stack(repo_cleanup, run_workflows):
     logger.info(f"Config: {config.to_dict()}")
     logger.info(f"Current working directory: {os.getcwd()}")
     logger.info(f"Current directory files: {os.listdir()}")
+    logger.info(f"Git base dir: {get_git_base_dir()}")
     create_stack()
 
     runner = CliRunner()
