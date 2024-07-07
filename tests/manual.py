@@ -2,15 +2,18 @@
 
 """Tests for `ghchain` package."""
 
-from pathlib import Path
+# flake8: noqa
 
-from ghchain.status import print_status
+from pathlib import Path
 
 
 my_test_repo = Path("~/ssrc/mytest").expanduser()
 import os
 
 os.chdir(my_test_repo)
+
+from ghchain.stack import Stack
+from ghchain.status import print_status
 import json
 import subprocess
 
@@ -20,9 +23,8 @@ from click.testing import CliRunner
 from ghchain import cli
 
 from ghchain.git_utils import (
-    Stack,
     get_all_branches,
-    rebase_onto_branch,
+    rebase_onto_target,
 )
 # from ghchain.github_utils import print_status
 
@@ -102,9 +104,19 @@ def test_rebase():
     create_test_stack(False)
     stack = Stack.create(base_branch="main")
     branch_to_change = stack.branches[3]
-    change_stack_with_conflict(branch_to_change)
+    # change_stack_with_conflict(branch_to_change)
     # you will have to resolve the conflict manually...
-    rebase_onto_branch(branch_to_change)
+    rebase_onto_target(branch_to_change)
+
+
+@pytest.mark.manual
+def test_land():
+    create_test_stack(False)
+    stack = Stack.create(base_branch="main")
+    branch_to_land = stack.branches[-1]
+    runner = CliRunner()
+    result = runner.invoke(cli.land, ["-b", branch_to_land])
+    assert result.exit_code == 0
 
 
 def test_run_workflows():
@@ -117,5 +129,6 @@ def test_print_status():
 
 
 if __name__ == "__main__":
-    # test_run_workflows()
+    test_rebase()
     test_ghchain(True)
+    test_land()

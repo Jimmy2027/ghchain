@@ -1,7 +1,7 @@
 import click
+
 from ghchain.config import config, logger
 from ghchain.git_utils import (
-    Stack,
     checkout_branch,
     create_branch_from_commit,
     create_branch_name,
@@ -15,6 +15,8 @@ from ghchain.github_utils import (
     run_tests_on_pr,
     update_pr_descriptions,
 )
+from ghchain.stack import Stack
+from ghchain.utils import run_command
 
 
 def handle_new_branch(
@@ -28,7 +30,7 @@ def handle_new_branch(
     create_branch_from_commit(branch_name, commit_sha)
     git_push(branch_name)
     pr_url = create_pull_request(
-        base_branch=base_branch,
+        base_branch=base_branch.replace("origin/", ""),
         head_branch=branch_name,
         title=commit_msg,
         body=commit_msg,
@@ -64,3 +66,25 @@ def handle_existing_branch(commit_sha, with_tests, stack: Stack, pr_stack: list)
         if with_tests:
             run_tests_on_pr(pr_url, branch_name)
     return branch_name
+
+
+def handle_land(branch):
+    """
+    Merge the specified branch into the configured base branch.
+    """
+
+    run_command(
+        ["git", "branch", "-f", config.base_branch.replace("origin/", ""), branch],
+        check=True,
+    )
+    run_command(
+        ["git", "push", "origin", config.base_branch.replace("origin/", "")], check=True
+    )
+
+    if config.delete_branch_after_merge:
+        # TODO: this doesn't work because of github bug
+        return
+        # delete the remote branch
+        run_command(["git", "push", "origin", "--delete", branch], check=True)
+        # delete the local branch
+        run_command(["git", "branch", "-D", branch], check=True)

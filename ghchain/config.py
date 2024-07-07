@@ -6,9 +6,16 @@ from pathlib import Path
 import tomllib
 from loguru import logger
 
-from ghchain.git_utils import get_git_base_dir
-
 logger.remove()
+
+
+def get_git_base_dir() -> Path:
+    result = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True
+    )
+    return Path(result.stdout.strip())
+
+
 CONFIG_FN = get_git_base_dir() / ".ghchain.toml"
 
 
@@ -16,8 +23,9 @@ CONFIG_FN = get_git_base_dir() / ".ghchain.toml"
 class Config:
     workflows: list[str]
     git_username: str
-    base_branch: str = "main"
+    base_branch: str = "origin/main"
     branch_name_template: str = "{git_config_author}-{pr_id}"
+    delete_branch_after_merge: bool = True
 
     # logging
     log_file: Path = get_git_base_dir() / "ghchain.log"

@@ -4,17 +4,17 @@ import click
 
 from ghchain.config import config, logger
 from ghchain.git_utils import (
-    Stack,
     checkout_branch,
     get_current_branch,
-    rebase_onto_branch,
+    rebase_onto_target,
 )
 from ghchain.github_utils import (
     get_branch_name_for_pr_id,
     get_pr_url_for_branch,
     run_tests_on_pr,
 )
-from ghchain.handlers import handle_existing_branch, handle_new_branch
+from ghchain.handlers import handle_existing_branch, handle_land, handle_new_branch
+from ghchain.stack import Stack
 from ghchain.status import print_status
 
 
@@ -32,8 +32,8 @@ def ghchain_cli():
 )
 def process_commits(draft, with_tests):
     """Processes commits and creates PRs for each."""
-    default_base_branch = config.base_branch
-    stack = Stack.create(base_branch=default_base_branch)
+    base_branch = config.base_branch
+    stack = Stack.create(base_branch=base_branch)
     if not stack.commits:
         logger.info("No commits found that are not in main.")
         return
@@ -44,7 +44,7 @@ def process_commits(draft, with_tests):
         logger.info(f"Processing commit: {commit_sha} - {commit_msg}")
         if commit_sha in stack.commits_without_branch:
             base_branch = handle_new_branch(
-                commit_sha, commit_msg, draft, with_tests, default_base_branch, pr_stack
+                commit_sha, commit_msg, draft, with_tests, base_branch, pr_stack
             )
             pr_created = True
         else:
@@ -63,41 +63,52 @@ def process_commits(draft, with_tests):
 
 @ghchain_cli.command()
 @click.option(
-    "--rebase-onto",
+    "--branch",
+    "-b",
+    type=str,
     default=None,
-    help=(
-        "Rebase the current branch onto another branch, using 'update-refs'"
-        "and push every updated branch to the remote."
-    ),
+    help=("The branch to which the configured base branch will be updated."),
 )
-@click.option(
-    "--interactive-rebase-onto",
-    default=None,
-    help=(
-        "Rebase the current branch onto another branch interactively, using 'update-refs'"
-        "and push every updated branch to the remote."
-    ),
-)
-def rebase(interactive_rebase_onto, rebase_onto):
-    """Handles the rebasing options."""
-    if interactive_rebase_onto:
-        rebase_onto_branch(interactive_rebase_onto, interactive=True)
-    elif rebase_onto:
-        rebase_onto_branch(rebase_onto)
+def land(branch):
+    """
+    Merge the specified branch into the configured base branch.
+    """
+    branch_name = get_current_branch() if branch == "." or not branch else branch
+    handle_land(branch_name)
 
 
 @ghchain_cli.command()
-@click.option("--status", is_flag=True, help="Print the status of the PRs")
+@click.argument(
+    "target",
+    type=str,
+)
 @click.option(
-    "--live-status",
+    "--interactive",
+    "-i",
+    is_flag=True,
+    help=(
+        "Do an interactive rebase. This will allow you to edit "
+        "the commit messages and the order of the commits."
+    ),
+)
+def rebase(target, interactive):
+    """
+    Rebase the current branch onto branch, using 'update-refs' and push every updated branch to the remote.
+    """
+    rebase_onto_target(target, interactive=interactive)
+
+
+@ghchain_cli.command()
+@click.option(
+    "--live",
+    "-l",
     is_flag=True,
     help="Print the status of the PRs, updating every minute.",
 )
-def status(status, live_status):
-    """Handles the status printing options."""
+def status(live):
+    """Print the status of the PRs"""
     default_base_branch = config.base_branch
-    if status or live_status:
-        print_status(base_branch=default_base_branch, live=live_status)
+    print_status(base_branch=default_base_branch, live=live)
 
 
 @ghchain_cli.command()
@@ -106,10 +117,7 @@ def status(status, live_status):
     "-b",
     type=str,
     default=None,
-    help=(
-        "Run the github workflows that are specified in the .ghchain.toml config"
-        "of the repository for the specified branch."
-    ),
+    help=("Branch name or PR ID to run the github workflows for."),
 )
 def run_tests(branch):
     """
