@@ -36,5 +36,7 @@ jobs:
             - name: Commit and Push
               run: |
                   git remote set-url origin https://x-access-token:${{ secrets.NEW_PAT_SECRET }}@github.com/HendrikKlug-synthara/mytest.git
-                  cp mytest/.ghchain.yml .
+                  ls
+                  cp ../mytest/.ghchain.yml .
+
                   TEST_REPO_DIR=$(pwd)/../mytest pytest tests/tests.py -vvv
