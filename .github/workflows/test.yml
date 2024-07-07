@@ -37,7 +37,5 @@ jobs:
 
             - name: Commit and Push
               run: |
-                  echo "TEST_REPO_DIR=$(pwd)/mytest" >> $GITHUB_ENV
-                  echo $TEST_REPO_DIR
                   git remote set-url origin https://x-access-token:${{ secrets.NEW_PAT_SECRET }}@github.com/HendrikKlug-synthara/mytest.git
-                  pytest tests/tests.py -vvv
+                  TEST_REPI_DIR=$(pwd)/mytest pytest tests/tests.py -vvv
