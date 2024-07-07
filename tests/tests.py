@@ -6,6 +6,7 @@ import pytest
 from click.testing import CliRunner
 
 from ghchain import cli
+from ghchain.config import logger
 from ghchain.git_utils import get_all_branches
 
 
@@ -59,6 +60,7 @@ def test_cwd():
 
 @pytest.mark.parametrize("run_workflows", [True, False])
 def test_create_stack(repo_cleanup, run_workflows):
+    logger.info("Running test_create_stack")
     create_stack()
 
     runner = CliRunner()
