@@ -30,12 +30,10 @@ jobs:
 
             - name: Make Changes
               run: |
+                  cd ..
                   git clone https://github.com/HendrikKlug-synthara/mytest.git
-                  cd mytest
-                  touch hello.txt
-                  git add hello.txt
 
             - name: Commit and Push
               run: |
                   git remote set-url origin https://x-access-token:${{ secrets.NEW_PAT_SECRET }}@github.com/HendrikKlug-synthara/mytest.git
-                  TEST_REPO_DIR=$(pwd)/mytest pytest tests/tests.py -vvv
+                  TEST_REPO_DIR=$(pwd)/../mytest pytest tests/tests.py -vvv
