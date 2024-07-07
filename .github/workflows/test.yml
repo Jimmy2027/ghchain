@@ -40,7 +40,7 @@ jobs:
               run: |
                   ls -a ../mytest
                   cp ../mytest/.ghchain.toml ghchain/
-                  cp ../mytest/.ghchain.toml ghchain/ghchain/
+                  cp ../mytest/.ghchain.toml .
                   cat ../mytest/.ghchain.toml
                   git remote set-url origin https://x-access-token:${{ secrets.NEW_PAT_SECRET }}@github.com/HendrikKlug-synthara/mytest.git
                   TEST_REPO_DIR=$(pwd)/../mytest pytest tests/tests.py -vvv
