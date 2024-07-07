@@ -19,13 +19,13 @@ jobs:
 
             - name: Install ghchain
               run: |
-                  pip install .
+                  pip install .[test]
 
             - name: Configure Git
               run: |
-                git config --global user.name "github-actions[bot]"
-                git config --global user.email "github-actions[bot]@users.noreply.github.com"
-                git remote set-url origin https://x-access-token:${{ secrets.NEW_PAT_SECRET }}@github.com/HendrikKlug-synthara/mytest.git
+                  git config --global user.name "github-actions[bot]"
+                  git config --global user.email "github-actions[bot]@users.noreply.github.com"
+                  git remote set-url origin https://x-access-token:${{ secrets.NEW_PAT_SECRET }}@github.com/HendrikKlug-synthara/mytest.git
 
             - name: Make Changes
               run: |
@@ -37,9 +37,6 @@ jobs:
             - name: Commit and Push
               run: |
                   cd mytest
+                  echo "TEST_REPO_DIR=$(pwd)" >> $GITHUB_ENV
                   git remote set-url origin https://x-access-token:${{ secrets.NEW_PAT_SECRET }}@github.com/HendrikKlug-synthara/mytest.git
-                  git add .
-                  git commit -m "Automated commit message"
-                  git log
-                  gh pr list --json number --state all
-                  ghchain process-commits --draft
+                  pytest tests/tests.py -vvv
