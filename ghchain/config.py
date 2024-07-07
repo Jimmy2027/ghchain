@@ -44,3 +44,5 @@ class Config:
 config = Config.from_toml(CONFIG_FN)
 logger.add(sys.stderr, level=config.log_level)
 logger.add(config.log_file, level=config.log_level)
+logger.info(f"Loaded config from {CONFIG_FN}")
+logger.info(f"Config: {config}")
