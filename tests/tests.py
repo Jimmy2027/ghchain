@@ -6,7 +6,8 @@ import pytest
 from click.testing import CliRunner
 
 from ghchain import cli
-from ghchain.config import logger
+from ghchain import config
+from ghchain.config import CONFIG_FN, logger
 from ghchain.git_utils import get_all_branches
 
 
@@ -61,6 +62,8 @@ def test_cwd():
 @pytest.mark.parametrize("run_workflows", [True, False])
 def test_create_stack(repo_cleanup, run_workflows):
     logger.info("Running test_create_stack")
+    logger.info(f"Loaded config from {CONFIG_FN}")
+    logger.info(f"Config: {config}")
     create_stack()
 
     runner = CliRunner()
