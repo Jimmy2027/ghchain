@@ -40,9 +40,20 @@ class Config:
         toml_dict = tomllib.loads(toml_string)
         return cls(**toml_dict, git_username=git_username)
 
+    def to_dict(self):
+        return {
+            "workflows": self.workflows,
+            "git_username": self.git_username,
+            "base_branch": self.base_branch,
+            "branch_name_template": self.branch_name_template,
+            "delete_branch_after_merge": self.delete_branch_after_merge,
+            "log_file": self.log_file,
+            "log_level": self.log_level,
+        }
+
 
 config = Config.from_toml(CONFIG_FN)
 logger.add(sys.stderr, level=config.log_level)
 logger.add(config.log_file, level=config.log_level)
 logger.info(f"Loaded config from {CONFIG_FN}")
-logger.info(f"Config: {config}")
+logger.info(f"Config: {config.to_dict()}")
