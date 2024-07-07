@@ -49,7 +49,7 @@ def get_all_branches() -> list[str]:
 
 
 def git_push(branch_name: str):
-    run_command(["git", "push", "origin", branch_name])
+    run_command(["git", "push", "origin", branch_name], check=True)
 
 
 def checkout_branch(branch_name: str):

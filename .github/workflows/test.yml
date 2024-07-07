@@ -37,6 +37,7 @@ jobs:
             - name: Commit and Push
               run: |
                   cd mytest
+                  git remote set-url origin https://x-access-token:${{ secrets.NEW_PAT_SECRET }}@github.com/HendrikKlug-synthara/mytest.git
                   git add .
                   git commit -m "Automated commit message"
                   git log
