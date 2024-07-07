@@ -20,6 +20,7 @@ jobs:
             - name: Install ghchain
               run: |
                   pip install .[test]
+                  pip install pytest
 
             - name: Configure Git
               run: |
