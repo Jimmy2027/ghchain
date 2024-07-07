@@ -10,6 +10,7 @@ with open("README.md") as readme_file:
 requirements = [
     "Click>=7.0",
     "rich",
+    "loguru",
 ]
 
 test_requirements = [
