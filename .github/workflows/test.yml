@@ -1,0 +1,36 @@
+name: Example Workflow
+
+on:
+    push:
+    workflow_dispatch:
+
+jobs:
+    build:
+        runs-on: ubuntu-latest
+
+        steps:
+            - uses: actions/checkout@v4
+            - uses: actions/setup-python@v5
+              with:
+                  python-version: "3.11"
+
+            - name: Install ghchain
+              run: |
+                  pip install .
+
+            - name: Make Changes
+              run: |
+                  git clone https://github.com/HendrikKlug-synthara/mytest.git
+                  cd mytest
+                  touch hello.txt
+                  git add hello.txt
+
+            - name: Commit and Push
+              run: |
+                  cd mytest
+                  git config user.name "GitHub Actions"
+                  git config user.email "hendrik.klug@synthara.ai"
+                  git add .
+                  git commit -m "Automated commit message"
+                  ghchain --help
+                  ghchain process-commits --draft
