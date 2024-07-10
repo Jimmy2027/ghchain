@@ -16,12 +16,12 @@ def cli_runner():
         yield runner
 
 
-@pytest.fixture(scope="module")
-def repo_cleanup():
-    """Fixture to clean up the repository before tests."""
-    cleanup_repo()
-    yield
-    cleanup_repo()
+# @pytest.fixture(scope="module")
+# def repo_cleanup():
+#     """Fixture to clean up the repository before tests."""
+#     cleanup_repo()
+#     yield
+#     cleanup_repo()
 
 
 def cleanup_repo():
@@ -69,9 +69,15 @@ def test_create_stack(cli_runner, repo_cleanup, run_workflows):
     with cli_runner.isolated_filesystem():
         logger.info(f"Current working directory: {os.getcwd()}")
         logger.info(f"Current directory files: {os.listdir()}")
-        subprocess.run(
-            ["git", "clone", "https://github.com/HendrikKlug-synthara/mytest.git", "."]
+
+        completed_process = subprocess.run(
+            ["git", "clone", "https://github.com/HendrikKlug-synthara/mytest.git", "."],
+            capture_output=True,
+            text=True,
         )
+
+        logger.info("Standard Output:", completed_process.stdout)
+        logger.info("Standard Error:", completed_process.stderr)
 
         os.chdir("mytest")
 
