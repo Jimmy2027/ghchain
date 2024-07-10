@@ -13,8 +13,7 @@ from ghchain.git_utils import get_all_branches
 @pytest.fixture
 def cli_runner():
     runner = CliRunner()
-    with runner.isolated_filesystem():
-        yield runner
+    yield runner
 
 
 @pytest.fixture(scope="module")
@@ -67,21 +66,21 @@ def test_cwd():
 
 @pytest.mark.parametrize("run_workflows", [True, False])
 def test_create_stack(cli_runner, repo_cleanup, run_workflows):
-    with cli_runner.isolated_filesystem():
-        os.chdir(os.getcwd())
+    os.chdir(os.getcwd())
 
-        logger.info("Running test_create_stack")
-        logger.info(f"Loaded config from {CONFIG_FN}")
-        logger.info(f"Config: {config.to_dict()}")
-        logger.info(f"Current working directory: {os.getcwd()}")
-        logger.info(f"Current directory files: {os.listdir()}")
-        logger.info(f"Git base dir: {get_git_base_dir()}")
+    logger.info("Running test_create_stack")
+    logger.info(f"Loaded config from {CONFIG_FN}")
+    logger.info(f"Config: {config.to_dict()}")
+    logger.info(f"Current working directory: {os.getcwd()}")
+    logger.info(f"Current directory files: {os.listdir()}")
+    logger.info(f"Git base dir: {get_git_base_dir()}")
+    create_stack()
 
-        create_stack()
+    runner = CliRunner()
 
-        if run_workflows:
-            result = cli_runner.invoke(cli.process_commits, ["--with-tests"])
-        else:
-            result = cli_runner.invoke(cli.process_commits)
+    if run_workflows:
+        result = runner.invoke(cli.process_commits, ["--with-tests"])
+    else:
+        result = runner.invoke(cli.process_commits)
 
-        assert result.exit_code == 0
+    assert result.exit_code == 0
