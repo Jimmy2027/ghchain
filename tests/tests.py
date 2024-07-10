@@ -76,11 +76,9 @@ def test_create_stack(cli_runner, repo_cleanup, run_workflows):
     logger.info(f"Git base dir: {get_git_base_dir()}")
     create_stack()
 
-    runner = CliRunner()
-
     if run_workflows:
-        result = runner.invoke(cli.process_commits, ["--with-tests"])
+        result = cli_runner.invoke(cli.process_commits, ["--with-tests"])
     else:
-        result = runner.invoke(cli.process_commits)
+        result = cli_runner.invoke(cli.process_commits)
 
     assert result.exit_code == 0
