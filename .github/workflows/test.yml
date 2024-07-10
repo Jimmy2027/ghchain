@@ -43,4 +43,4 @@ jobs:
                   cp ../mytest/.ghchain.toml .
                   cat ../mytest/.ghchain.toml
                   git remote set-url origin https://x-access-token:${{ secrets.NEW_PAT_SECRET }}@github.com/HendrikKlug-synthara/mytest.git
-                  TEST_REPO_DIR=$(pwd)/../mytest pytest tests/tests.py -vvv
+                  TEST_REPO_DIR=$(pwd)/../mytest pytest tests/tests.py -s -vvv
