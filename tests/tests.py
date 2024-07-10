@@ -65,7 +65,7 @@ def test_cwd():
 
 
 @pytest.mark.parametrize("run_workflows", [True, False])
-def test_create_stack(cli_runner, repo_cleanup, run_workflows):
+def test_create_stack(cli_runner, run_workflows):
     with cli_runner.isolated_filesystem():
         logger.info(f"Current working directory: {os.getcwd()}")
         logger.info(f"Current directory files: {os.listdir()}")
