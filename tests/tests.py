@@ -39,6 +39,7 @@ def setup_mytest_repo(tmpdir_factory):
     logger.info(f"Config file: {config_fn}")
     assert config_fn.exists(), f"Config file {config_fn} does not exist."
     config = Config.from_toml(config_fn)
+    logger.info(f"Config: {config.to_dict()}")
     return temp_dir
 
 
