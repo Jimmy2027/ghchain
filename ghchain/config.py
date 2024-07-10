@@ -13,6 +13,7 @@ def get_git_base_dir() -> Path:
     result = subprocess.run(
         ["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True
     )
+    logger.debug(f"git rev-parse --show-toplevel: {result}")
     return Path(result.stdout.strip())
 
 
