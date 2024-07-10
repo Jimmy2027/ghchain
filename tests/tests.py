@@ -5,6 +5,7 @@ import subprocess
 import pytest
 from click.testing import CliRunner
 
+from ghchain import cli
 from ghchain.config import CONFIG_FN, config, get_git_base_dir, logger
 from ghchain.git_utils import get_all_branches
 
@@ -74,12 +75,10 @@ def test_create_stack(cli_runner, run_workflows):
             ["git", "clone", "https://github.com/HendrikKlug-synthara/mytest.git", "."],
             capture_output=True,
             text=True,
+            cwd=os.getcwd(),
         )
 
-        logger.info("Standard Output:", completed_process.stdout)
-        logger.info("Standard Error:", completed_process.stderr)
-
-        os.chdir("mytest")
+        logger.info(f"Current directory files: {os.listdir()}")
 
         logger.info("Running test_create_stack")
         logger.info(f"Loaded config from {CONFIG_FN}")
@@ -89,9 +88,9 @@ def test_create_stack(cli_runner, run_workflows):
         logger.info(f"Git base dir: {get_git_base_dir()}")
         # create_stack()
 
-        # if run_workflows:
-        #     result = cli_runner.invoke(cli.process_commits, ["--with-tests"])
-        # else:
-        #     result = cli_runner.invoke(cli.process_commits)
+        if run_workflows:
+            result = cli_runner.invoke(cli.process_commits, ["--with-tests"])
+        else:
+            result = cli_runner.invoke(cli.process_commits)
 
         # assert result.exit_code == 0
