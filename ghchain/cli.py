@@ -2,21 +2,6 @@
 
 import click
 
-from ghchain.config import config, logger
-from ghchain.git_utils import (
-    checkout_branch,
-    get_current_branch,
-    rebase_onto_target,
-)
-from ghchain.github_utils import (
-    get_branch_name_for_pr_id,
-    get_pr_url_for_branch,
-    run_tests_on_pr,
-)
-from ghchain.handlers import handle_existing_branch, handle_land, handle_new_branch
-from ghchain.stack import Stack
-from ghchain.status import print_status
-
 
 @click.group()
 def ghchain_cli():
@@ -32,6 +17,11 @@ def ghchain_cli():
 )
 def process_commits(draft, with_tests):
     """Processes commits and creates PRs for each."""
+    from ghchain.config import config, logger
+    from ghchain.git_utils import checkout_branch
+    from ghchain.handlers import handle_existing_branch, handle_new_branch
+    from ghchain.stack import Stack
+
     logger.info(f"Config: {config.to_dict()}")
     base_branch = config.base_branch
     stack = Stack.create(base_branch=base_branch)
@@ -74,6 +64,9 @@ def land(branch):
     """
     Merge the specified branch into the configured base branch.
     """
+    from ghchain.git_utils import get_current_branch
+    from ghchain.handlers import handle_land
+
     branch_name = get_current_branch() if branch == "." or not branch else branch
     handle_land(branch_name)
 
@@ -96,6 +89,8 @@ def rebase(target, interactive):
     """
     Rebase the current branch onto branch, using 'update-refs' and push every updated branch to the remote.
     """
+    from ghchain.git_utils import rebase_onto_target
+
     rebase_onto_target(target, interactive=interactive)
 
 
@@ -108,6 +103,9 @@ def rebase(target, interactive):
 )
 def status(live):
     """Print the status of the PRs"""
+    from ghchain.config import config
+    from ghchain.status import print_status
+
     default_base_branch = config.base_branch
     print_status(base_branch=default_base_branch, live=live)
 
@@ -125,6 +123,13 @@ def run_tests(branch):
     Run the github workflows that are specified in the .ghchain.toml config of the repository for the specified branch.
     If '.' or nothing is passed, the current branch will be used.
     """
+    from ghchain.git_utils import get_current_branch
+    from ghchain.github_utils import (
+        get_branch_name_for_pr_id,
+        get_pr_url_for_branch,
+        run_tests_on_pr,
+    )
+
     branch_name = (
         get_branch_name_for_pr_id(int(branch))
         if branch.isdigit()
