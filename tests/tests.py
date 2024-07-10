@@ -45,7 +45,6 @@ def repo_cleanup():
     """Fixture to clean up the repository before tests."""
     cleanup_repo()
     yield
-    # cleanup_repo()
 
 
 def cleanup_repo():
@@ -83,7 +82,7 @@ def create_stack():
         run_command(["git", "commit", "-m", f"commit {i}"])
 
 
-@pytest.mark.parametrize("run_workflows", [False])
+@pytest.mark.parametrize("run_workflows", [False, True])
 def test_create_stack(cli_runner, repo_cleanup, run_workflows):
     cli_runner, _ = cli_runner
 
