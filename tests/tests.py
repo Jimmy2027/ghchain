@@ -1,13 +1,12 @@
 import json
 import os
 import subprocess
-from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
 
 from ghchain import cli
-from ghchain.config import Config, logger
+from ghchain.config import logger
 from ghchain.git_utils import get_all_branches
 from ghchain.utils import run_command
 
@@ -32,14 +31,6 @@ def setup_mytest_repo(tmpdir_factory):
         f"github.com/HendrikKlug-synthara/mytest.git"
     )
     subprocess.run(command, shell=True, check=True)
-
-    logger.info("Configuring git user")
-    global config
-    config_fn = Path(".ghchain.toml").absolute()
-    logger.info(f"Config file: {config_fn}")
-    assert config_fn.exists(), f"Config file {config_fn} does not exist."
-    config = Config.from_toml(config_fn)
-    logger.info(f"Config: {config.to_dict()}")
     return temp_dir
 
 

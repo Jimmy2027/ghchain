@@ -27,6 +27,13 @@ jobs:
                   git config --global user.name "github-actions[bot]"
                   git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
+            - name: Make Changes
+              run: |
+                  cd ..
+                  git clone https://github.com/HendrikKlug-synthara/mytest.git
+
             - name: Commit and Push
               run: |
+                  cp ../mytest/.ghchain.toml ghchain/
+                  cp ../mytest/.ghchain.toml .
                   pytest tests/tests.py -s -vvv

@@ -22,7 +22,6 @@ def process_commits(draft, with_tests):
     from ghchain.handlers import handle_existing_branch, handle_new_branch
     from ghchain.stack import Stack
 
-    logger.info(f"Config: {config.to_dict()}")
     base_branch = config.base_branch
     stack = Stack.create(base_branch=base_branch)
     if not stack.commits:
