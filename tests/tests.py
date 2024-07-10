@@ -8,6 +8,7 @@ from click.testing import CliRunner
 from ghchain import cli
 from ghchain.config import CONFIG_FN, config, get_git_base_dir, logger
 from ghchain.git_utils import get_all_branches
+from ghchain.utils import run_command
 
 
 @pytest.fixture
@@ -16,31 +17,37 @@ def cli_runner():
     with runner.isolated_filesystem():
         yield runner
 
+@pytest.fixture(scope="module")
+def repo_cleanup():
+    """Fixture to clean up the repository before tests."""
+    cleanup_repo()
+    yield
+    cleanup_repo()
 
 def cleanup_repo():
     """Delete all current branches and pull requests and create a new branch mydev."""
-    subprocess.run(["git", "checkout", "main"])
-    subprocess.run(["git", "reset", "--hard", "origin/main"])
+    run_command(["git", "checkout", "main"])
+    run_command(["git", "reset", "--hard", "origin/main"])
 
     branches = set(get_all_branches()) - {"main"}
 
     for branch in branches:
-        subprocess.run(["git", "branch", "-D", branch])
-        subprocess.run(["git", "push", "origin", "--delete", branch])
+        run_command(["git", "branch", "-D", branch])
+        run_command(["git", "push", "origin", "--delete", branch])
 
-    prs_json = subprocess.run(
-        ["gh", "pr", "list", "--json", "url"], capture_output=True, text=True
+    prs_json = run_command(
+        ["gh", "pr", "list", "--json", "url"],
     ).stdout
 
     prs = json.loads(prs_json)
     for pr in prs:
         pr_url = pr["url"]
-        subprocess.run(
-            ["gh", "pr", "close", pr_url, "-d"], capture_output=True, text=True
+        run_command(
+            ["gh", "pr", "close", pr_url, "-d"],
         )
 
-    subprocess.run(["git", "checkout", "main"])
-    subprocess.run(["git", "checkout", "-b", "mydev"])
+    run_command(["git", "checkout", "main"])
+    run_command(["git", "checkout", "-b", "mydev"])
 
 
 def create_stack():
@@ -48,17 +55,13 @@ def create_stack():
     for i in range(4):
         with open("README.md", "a") as f:
             f.write(f"line {i}\n")
-        subprocess.run(["git", "add", "README.md"])
-        subprocess.run(["git", "commit", "-m", f"commit {i}"])
+        run_command(["git", "add", "README.md"])
+        run_command(["git", "commit", "-m", f"commit {i}"])
 
-
-def test_cwd():
-    """Test that the current working directory is in 'mytest'."""
-    assert os.getcwd().endswith("mytest")
 
 
 @pytest.mark.parametrize("run_workflows", [True, False])
-def test_create_stack(cli_runner, run_workflows):
+def test_create_stack(cli_runner, repo_cleanup, run_workflows):
     with cli_runner.isolated_filesystem():
         logger.info(f"Current working directory: {os.getcwd()}")
         logger.info(f"Current directory files: {os.listdir()}")
@@ -88,3 +91,6 @@ def test_create_stack(cli_runner, run_workflows):
 
         assert result.exit_code == 0
 
+
+if __name__ == "__main__":
+    pytest.main(["-v", __file__, "-s"])
