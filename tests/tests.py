@@ -17,14 +17,6 @@ def cli_runner():
         yield runner
 
 
-# @pytest.fixture(scope="module")
-# def repo_cleanup():
-#     """Fixture to clean up the repository before tests."""
-#     cleanup_repo()
-#     yield
-#     cleanup_repo()
-
-
 def cleanup_repo():
     """Delete all current branches and pull requests and create a new branch mydev."""
     subprocess.run(["git", "checkout", "main"])
@@ -76,6 +68,7 @@ def test_create_stack(cli_runner, run_workflows):
             capture_output=True,
             text=True,
             cwd=os.getcwd(),
+            check=True,
         )
 
         logger.info(f"Current directory files: {os.listdir()}")
@@ -86,11 +79,11 @@ def test_create_stack(cli_runner, run_workflows):
         logger.info(f"Current working directory: {os.getcwd()}")
         logger.info(f"Current directory files: {os.listdir()}")
         logger.info(f"Git base dir: {get_git_base_dir()}")
-        # create_stack()
+        create_stack()
 
         if run_workflows:
             result = cli_runner.invoke(cli.process_commits, ["--with-tests"])
         else:
             result = cli_runner.invoke(cli.process_commits)
 
-        # assert result.exit_code == 0
+        assert result.exit_code == 0

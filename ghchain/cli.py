@@ -33,10 +33,6 @@ def ghchain_cli():
 )
 def process_commits(draft, with_tests):
     """Processes commits and creates PRs for each."""
-    logger.info(
-        f"Processing commits with draft={draft} and with-tests={with_tests} from cwd {os.getcwd()}."
-    )
-    exit(1)
     base_branch = config.base_branch
     stack = Stack.create(base_branch=base_branch)
     if not stack.commits:
