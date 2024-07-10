@@ -10,6 +10,13 @@ from ghchain.config import CONFIG_FN, config, get_git_base_dir, logger
 from ghchain.git_utils import get_all_branches
 
 
+@pytest.fixture
+def cli_runner():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        yield runner
+
+
 @pytest.fixture(scope="module")
 def repo_cleanup():
     """Fixture to clean up the repository before tests."""
@@ -59,19 +66,22 @@ def test_cwd():
 
 
 @pytest.mark.parametrize("run_workflows", [True, False])
-def test_create_stack(repo_cleanup, run_workflows):
-    logger.info("Running test_create_stack")
-    logger.info(f"Loaded config from {CONFIG_FN}")
-    logger.info(f"Config: {config.to_dict()}")
-    logger.info(f"Current working directory: {os.getcwd()}")
-    logger.info(f"Current directory files: {os.listdir()}")
-    logger.info(f"Git base dir: {get_git_base_dir()}")
-    create_stack()
+def test_create_stack(cli_runner, repo_cleanup, run_workflows):
+    with cli_runner.isolated_filesystem():
+        os.chdir(os.getcwd())
 
-    runner = CliRunner()
-    if run_workflows:
-        result = runner.invoke(cli.process_commits, ["--with-tests"])
-    else:
-        result = runner.invoke(cli.process_commits)
+        logger.info("Running test_create_stack")
+        logger.info(f"Loaded config from {CONFIG_FN}")
+        logger.info(f"Config: {config.to_dict()}")
+        logger.info(f"Current working directory: {os.getcwd()}")
+        logger.info(f"Current directory files: {os.listdir()}")
+        logger.info(f"Git base dir: {get_git_base_dir()}")
 
-    assert result.exit_code == 0
+        create_stack()
+
+        if run_workflows:
+            result = cli_runner.invoke(cli.process_commits, ["--with-tests"])
+        else:
+            result = cli_runner.invoke(cli.process_commits)
+
+        assert result.exit_code == 0
