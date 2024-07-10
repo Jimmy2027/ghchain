@@ -81,6 +81,8 @@ def create_stack():
 
 @pytest.mark.parametrize("run_workflows", [True, False])
 def test_create_stack(cli_runner, repo_cleanup, run_workflows):
+    cli_runner, _ = cli_runner
+
     logger.info("Running test_create_stack")
     logger.info(f"Loaded config from {CONFIG_FN}")
     logger.info(f"Config: {config.to_dict()}")
