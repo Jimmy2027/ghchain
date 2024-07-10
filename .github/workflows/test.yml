@@ -29,6 +29,4 @@ jobs:
 
             - name: Commit and Push
               run: |
-                  cp ../mytest/.ghchain.toml ghchain/
-                  cp ../mytest/.ghchain.toml .
                   pytest tests/tests.py -s -vvv
