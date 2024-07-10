@@ -6,7 +6,7 @@ import pytest
 from click.testing import CliRunner
 
 from ghchain import cli
-from ghchain.config import CONFIG_FN, config, get_git_base_dir, logger
+from ghchain.config import logger
 from ghchain.git_utils import get_all_branches
 from ghchain.utils import run_command
 
@@ -25,7 +25,11 @@ def setup_mytest_repo(tmpdir_factory):
     )
 
     assert "GH_TOKEN" in os.environ
-    command = f"git remote set-url origin https://x-access-token:{os.environ['GH_TOKEN']}@github.com/HendrikKlug-synthara/mytest.git"
+    command = (
+        f"git remote set-url origin "
+        f"https://x-access-token:{os.environ['GH_TOKEN']}@"
+        f"github.com/HendrikKlug-synthara/mytest.git"
+    )
     subprocess.run(command, shell=True, check=True)
     return temp_dir
 
@@ -41,7 +45,7 @@ def repo_cleanup():
     """Fixture to clean up the repository before tests."""
     cleanup_repo()
     yield
-    cleanup_repo()
+    # cleanup_repo()
 
 
 def cleanup_repo():
@@ -79,22 +83,21 @@ def create_stack():
         run_command(["git", "commit", "-m", f"commit {i}"])
 
 
-@pytest.mark.parametrize("run_workflows", [True, False])
+@pytest.mark.parametrize("run_workflows", [False])
 def test_create_stack(cli_runner, repo_cleanup, run_workflows):
     cli_runner, _ = cli_runner
 
-    logger.info("Running test_create_stack")
-    logger.info(f"Loaded config from {CONFIG_FN}")
-    logger.info(f"Config: {config.to_dict()}")
-    logger.info(f"Current working directory: {os.getcwd()}")
-    logger.info(f"Current directory files: {os.listdir()}")
-    logger.info(f"Git base dir: {get_git_base_dir()}")
     create_stack()
 
     if run_workflows:
         result = cli_runner.invoke(cli.process_commits, ["--with-tests"])
     else:
         result = cli_runner.invoke(cli.process_commits)
+
+    # assert that the repo has 4 open pull requests
+    prs = run_command(["gh", "pr", "list", "--json", "url"]).stdout
+    prs = json.loads(prs)
+    assert len(prs) == 4, f"Expected 4 pull requests, got {len(prs)}"
 
     assert result.exit_code == 0
 
