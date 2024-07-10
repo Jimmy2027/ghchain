@@ -87,3 +87,4 @@ def test_create_stack(cli_runner, run_workflows):
             result = cli_runner.invoke(cli.process_commits)
 
         assert result.exit_code == 0
+
