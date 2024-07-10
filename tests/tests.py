@@ -33,7 +33,8 @@ def setup_mytest_repo(tmpdir_factory):
     )
     subprocess.run(command, shell=True, check=True)
     global config
-    config_fn = Path(".ghchain.toml")
+    config_fn = Path(".ghchain.toml").absolute()
+    assert config_fn.exists(), f"Config file {config_fn} does not exist."
     config = Config.from_toml(config_fn)
     return temp_dir
 

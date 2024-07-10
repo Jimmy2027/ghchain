@@ -35,6 +35,7 @@ class Config:
     def from_toml(cls, toml_fn: Path):
         git_username = subprocess.getoutput("git config user.name")
         if not toml_fn.exists():
+            logger.warning(f"No config file found at {toml_fn}. Using default values.")
             return cls(workflows=[], git_username=git_username)
         toml_string = toml_fn.read_text()
         toml_dict = tomllib.loads(toml_string)
