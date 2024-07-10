@@ -32,8 +32,11 @@ def setup_mytest_repo(tmpdir_factory):
         f"github.com/HendrikKlug-synthara/mytest.git"
     )
     subprocess.run(command, shell=True, check=True)
+
+    logger.info("Configuring git user")
     global config
     config_fn = Path(".ghchain.toml").absolute()
+    logger.info(f"Config file: {config_fn}")
     assert config_fn.exists(), f"Config file {config_fn} does not exist."
     config = Config.from_toml(config_fn)
     return temp_dir
