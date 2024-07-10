@@ -17,12 +17,14 @@ def cli_runner():
     with runner.isolated_filesystem():
         yield runner
 
+
 @pytest.fixture(scope="module")
 def repo_cleanup():
     """Fixture to clean up the repository before tests."""
     cleanup_repo()
     yield
     cleanup_repo()
+
 
 def cleanup_repo():
     """Delete all current branches and pull requests and create a new branch mydev."""
@@ -59,7 +61,6 @@ def create_stack():
         run_command(["git", "commit", "-m", f"commit {i}"])
 
 
-
 @pytest.mark.parametrize("run_workflows", [True, False])
 def test_create_stack(cli_runner, repo_cleanup, run_workflows):
     with cli_runner.isolated_filesystem():
@@ -73,6 +74,10 @@ def test_create_stack(cli_runner, repo_cleanup, run_workflows):
             cwd=os.getcwd(),
             check=True,
         )
+
+        assert "GH_TOKEN" in os.environ
+        command = f"git remote set-url origin https://x-access-token:{os.environ['GH_TOKEN']}@github.com/HendrikKlug-synthara/mytest.git"
+        subprocess.run(command, shell=True, check=True)
 
         logger.info(f"Current directory files: {os.listdir()}")
 
