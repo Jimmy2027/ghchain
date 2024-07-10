@@ -1,12 +1,13 @@
 import json
 import os
 import subprocess
+from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
 
 from ghchain import cli
-from ghchain.config import logger
+from ghchain.config import Config, logger
 from ghchain.git_utils import get_all_branches
 from ghchain.utils import run_command
 
@@ -31,6 +32,9 @@ def setup_mytest_repo(tmpdir_factory):
         f"github.com/HendrikKlug-synthara/mytest.git"
     )
     subprocess.run(command, shell=True, check=True)
+    global config
+    config_fn = Path(".ghchain.toml")
+    config = Config.from_toml(config_fn)
     return temp_dir
 
 
