@@ -40,7 +40,7 @@ def cli_runner(setup_mytest_repo):
     yield runner, setup_mytest_repo
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="function")
 def repo_cleanup():
     """Fixture to clean up the repository before tests."""
     cleanup_repo()
