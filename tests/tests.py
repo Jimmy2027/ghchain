@@ -8,6 +8,7 @@ from click.testing import CliRunner
 from ghchain import cli
 from ghchain.config import logger
 from ghchain.git_utils import get_all_branches
+from ghchain.stack import Stack
 from ghchain.utils import run_command
 
 
@@ -24,13 +25,13 @@ def setup_mytest_repo(tmpdir_factory):
         check=True,
     )
 
-    assert "GH_TOKEN" in os.environ
-    command = (
-        f"git remote set-url origin "
-        f"https://x-access-token:{os.environ['GH_TOKEN']}@"
-        f"github.com/HendrikKlug-synthara/mytest.git"
-    )
-    subprocess.run(command, shell=True, check=True)
+    if "GH_TOKEN" in os.environ:
+        command = (
+            f"git remote set-url origin "
+            f"https://x-access-token:{os.environ['GH_TOKEN']}@"
+            f"github.com/HendrikKlug-synthara/mytest.git"
+        )
+        subprocess.run(command, shell=True, check=True)
     return temp_dir
 
 
@@ -82,8 +83,9 @@ def create_stack():
         run_command(["git", "commit", "-m", f"commit {i}"])
 
 
+@pytest.mark.order(1)
 @pytest.mark.parametrize("run_workflows", [False, True])
-def test_create_stack(cli_runner, repo_cleanup, run_workflows):
+def test_process_commits(cli_runner, repo_cleanup, run_workflows):
     cli_runner, _ = cli_runner
 
     create_stack()
@@ -97,6 +99,23 @@ def test_create_stack(cli_runner, repo_cleanup, run_workflows):
     prs = run_command(["gh", "pr", "list", "--json", "url"]).stdout
     prs = json.loads(prs)
     assert len(prs) == 4, f"Expected 4 pull requests, got {len(prs)}"
+
+    assert result.exit_code == 0
+
+
+@pytest.mark.order(2)
+def test_land(cli_runner):
+    cli_runner, _ = cli_runner
+
+    stack = Stack.create(base_branch="main")
+    branch_to_land = stack.branches[-1]
+    runner = CliRunner()
+    result = runner.invoke(cli.land, ["-b", branch_to_land])
+
+    # assert that the repo has 3 open pull requests
+    prs = run_command(["gh", "pr", "list", "--json", "url"]).stdout
+    prs = json.loads(prs)
+    assert len(prs) == 3, f"Expected 3 pull requests, got {len(prs)}"
 
     assert result.exit_code == 0
 

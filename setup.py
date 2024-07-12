@@ -13,9 +13,7 @@ requirements = [
     "loguru",
 ]
 
-test_requirements = [
-    "pytest>=3",
-]
+test_requirements = ["pytest>=3", "pytest-order"]
 
 setup(
     author="Hendrik Klug",

@@ -1,3 +1,4 @@
+import json
 import click
 
 from ghchain.config import config, logger
@@ -82,9 +83,39 @@ def handle_land(branch):
     )
 
     if config.delete_branch_after_merge:
-        # TODO: this doesn't work because of github bug
-        return
-        # delete the remote branch
+        # List all open PRs targeting the branch to be deleted
+        prs = json.loads(
+            run_command(
+                [
+                    "gh",
+                    "pr",
+                    "list",
+                    "--json",
+                    "number",
+                    "--state",
+                    "open",
+                    "--base",
+                    branch,
+                ],
+                check=True,
+            ).stdout
+        )
+
+        # Change the base branch of all those PRs to target the configured base branch
+        for pr in prs:
+            run_command(
+                [
+                    "gh",
+                    "pr",
+                    "edit",
+                    str(pr["number"]),
+                    "--base",
+                    config.base_branch.replace("origin/", ""),
+                ],
+                check=True,
+            )
+
+        # Delete the remote branch
         run_command(["git", "push", "origin", "--delete", branch], check=True)
-        # delete the local branch
+        # Delete the local branch
         run_command(["git", "branch", "-D", branch], check=True)
