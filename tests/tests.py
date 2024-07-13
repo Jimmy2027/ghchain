@@ -121,5 +121,29 @@ def test_land(cli_runner):
     assert result.exit_code == 0
 
 
+@pytest.mark.order(3)
+def test_main_out_of_date(cli_runner, repo_cleanup):
+    """
+    Test that process commits works also if the local main branch is out of date.
+    """
+    cli_runner, _ = cli_runner
+
+    # Stack is up to date with origin/main
+    create_stack()
+
+    run_command(["git", "checkout", "main"])
+    run_command(["git", "reset", "--hard", "HEAD~2"])
+    run_command(["git", "checkout", "-"])
+
+    result = cli_runner.invoke(cli.process_commits)
+
+    # assert that the repo has 4 open pull requests
+    prs = run_command(["gh", "pr", "list", "--json", "url"]).stdout
+    prs = json.loads(prs)
+    assert len(prs) == 4, f"Expected 4 pull requests, got {len(prs)}"
+
+    assert result.exit_code == 0
+
+
 if __name__ == "__main__":
     pytest.main(["-v", __file__, "-s"])
