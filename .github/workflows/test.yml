@@ -33,7 +33,7 @@ jobs:
             - name: Install ghchain
               run: |
                   pip install .[test]
-                  pip install pytest
+                  pip install pytest pytest-order
 
             - name: Configure Git
               run: |

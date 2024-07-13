@@ -105,8 +105,11 @@ def test_process_commits(cli_runner, repo_cleanup, run_workflows):
 
 
 @pytest.mark.order(2)
-def test_land(cli_runner):
+def test_land(cli_runner, repo_cleanup):
     cli_runner, _ = cli_runner
+
+    create_stack()
+    cli_runner.invoke(cli.process_commits)
 
     stack = Stack.create(base_branch="main")
     branch_to_land = stack.branches[-1]
@@ -121,7 +124,41 @@ def test_land(cli_runner):
     assert result.exit_code == 0
 
 
-@pytest.mark.order(3)
+@pytest.mark.order(2)
+def test_multiple_commits_per_pr(cli_runner, repo_cleanup):
+    """
+    Test process commits when there are commits added to a pr.
+    """
+    cli_runner, _ = cli_runner
+
+    # Stack is up to date with origin/main
+    create_stack()
+    cli_runner.invoke(cli.process_commits)
+
+    stack = Stack.create(base_branch="main")
+    bottom_branch = stack.branches[-1]
+
+    run_command(["git", "checkout", bottom_branch])
+    run_command(["touch", "new_file"])
+    run_command(["git", "add", "new_file"])
+    run_command(["git", "commit", "-m", "fixup! new file"])
+    run_command(["git", "push"])
+    run_command(["git", "checkout", "-"])
+    cli_runner.invoke(cli.rebase, [bottom_branch])
+
+    stack = Stack.create()
+
+    result = cli_runner.invoke(cli.process_commits)
+
+    # assert that the repo has 4 open pull requests
+    prs = run_command(["gh", "pr", "list", "--json", "url"]).stdout
+    prs = json.loads(prs)
+    assert len(prs) == 4, f"Expected 4 pull requests, got {len(prs)}"
+
+    assert result.exit_code == 0
+
+
+@pytest.mark.order(2)
 def test_main_out_of_date(cli_runner, repo_cleanup):
     """
     Test that process commits works also if the local main branch is out of date.
@@ -146,4 +183,4 @@ def test_main_out_of_date(cli_runner, repo_cleanup):
 
 
 if __name__ == "__main__":
-    pytest.main(["-v", __file__, "-s"])
+    pytest.main(["-v", __file__, "-s", "-k test_multiple_commits_per_pr"])

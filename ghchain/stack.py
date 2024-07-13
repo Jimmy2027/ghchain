@@ -1,10 +1,10 @@
 from dataclasses import dataclass
 
+from ghchain.config import config, logger
 from ghchain.git_utils import (
-    find_ref_branches_of_commit,
+    find_branches_with_commit,
     get_commits_not_in_base_branch,
     get_current_branch,
-    get_refs_dict,
 )
 
 
@@ -14,21 +14,29 @@ class Stack:
     commit2message: dict[str, str]
     commit2branches: dict[str, set[str]]
     dev_branch: str
-    base_branch: str = "main"
+    base_branch: str
 
     @classmethod
-    def create(cls, base_branch: str):
+    def create(cls, base_branch: str = None):
+        if not base_branch:
+            base_branch = config.base_branch
         dev_branch = get_current_branch()
-        refs = get_refs_dict()
         commit2message = {
             e[0]: e[1] for e in get_commits_not_in_base_branch(base_branch)
         }
         commits = list(commit2message)
         commit2branch = {
-            commit: set(find_ref_branches_of_commit(refs, commit)) for commit in commits
+            commit: set(find_branches_with_commit(commit)) for commit in commits
         }
 
-        return cls(commits, commit2message, commit2branch, dev_branch=dev_branch)
+        logger.info(f"Creating stack with dev branch: {dev_branch}")
+        return cls(
+            commits,
+            commit2message,
+            commit2branch,
+            dev_branch=dev_branch,
+            base_branch=base_branch,
+        )
 
     def commit2branch(self, commit: str) -> str | None:
         # return the branch for which the commit is the latest commit
