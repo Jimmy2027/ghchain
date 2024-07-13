@@ -162,7 +162,13 @@ You can also run `ghchain status --live` which refreshes the status every minute
 
 ## Installation
 
-### pip
+### pip release version
+
+```bash
+pip install ghchain
+```
+
+### pip live version
 
 ```bash
 pip install git+https://github.com/Jimmy2027/ghchain.git
