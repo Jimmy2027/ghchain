@@ -1,0 +1,52 @@
+name: Run Tests
+
+on:
+    push:
+        branches:
+            - main
+            - dev
+    pull_request:
+        branches:
+            - main
+        paths-ignore:
+            - "**.md"
+    workflow_dispatch:
+
+env:
+    GH_TOKEN: ${{ secrets.NEW_PAT_SECRET }}
+
+# Use concurrency to ensure only the latest run for a branch is in progress
+concurrency:
+    group: ${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
+
+jobs:
+    build:
+        runs-on: ubuntu-latest
+
+        steps:
+            - uses: actions/checkout@v4
+            - uses: actions/setup-python@v5
+              with:
+                  python-version: "3.11"
+
+            - name: Install ghchain
+              run: |
+                  pip install .[test]
+                  pip install pytest
+
+            - name: Configure Git
+              run: |
+                  git config --global user.name "github-actions[bot]"
+                  git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+            - name: Make Changes
+              run: |
+                  cd ..
+                  git clone https://github.com/HendrikKlug-synthara/mytest.git
+
+            - name: Run Pytests
+              run: |
+                  cp ../mytest/.ghchain.toml ghchain/
+                  cp ../mytest/.ghchain.toml .
+                  pytest tests/tests.py -s -vvv
