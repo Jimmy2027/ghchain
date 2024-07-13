@@ -104,7 +104,32 @@ def test_process_commits(cli_runner, repo_cleanup, run_workflows):
     assert result.exit_code == 0
 
 
-@pytest.mark.order(2)
+@pytest.mark.order(1)
+def test_rebase(cli_runner, repo_cleanup):
+    cli_runner, _ = cli_runner
+
+    # Stack is up to date with origin/main
+    create_stack()
+    cli_runner.invoke(cli.process_commits)
+
+    stack = Stack.create(base_branch="main")
+    bottom_branch = stack.branches[-1]
+
+    run_command(["git", "checkout", bottom_branch])
+    run_command(["touch", "new_file"])
+    run_command(["git", "add", "new_file"])
+    run_command(["git", "commit", "-m", "new file"])
+    run_command(["git", "push"])
+    run_command(["git", "checkout", "-"])
+    result = cli_runner.invoke(cli.rebase, [bottom_branch])
+
+    assert result.exit_code == 0
+
+    stack = Stack.create()
+    assert len(stack.commits) == 5
+
+
+@pytest.mark.order(1)
 def test_land(cli_runner, repo_cleanup):
     cli_runner, _ = cli_runner
 
@@ -183,4 +208,4 @@ def test_main_out_of_date(cli_runner, repo_cleanup):
 
 
 if __name__ == "__main__":
-    pytest.main(["-v", __file__, "-s", "-k test_multiple_commits_per_pr"])
+    pytest.main(["-v", __file__, "-s", "-k test_rebase"])
