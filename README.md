@@ -11,7 +11,6 @@ This tool is heavily inspired by [ghstack](https://github.com/ezyang/ghstack) an
 -   **Dynamic Branch Naming**: Configurable branch naming schemes to match your project's conventions.
 
 > [!CAUTION]
-> ghchain does not currently support multiple parallel stacks.
 > Running `ghchain` with multiple branches containing the same commit may lead to conflicts or errors.
 
 # Configuration
@@ -21,7 +20,11 @@ Current configuration options include:
 
 ```toml
 workflows = []  # List of GitHub Actions workflows to run with the tests flags
+base_branch = "origin/main"  # Base branch for the PRs
 branch_name_template = "{git_config_author}-{pr_id}"  # Template for naming branches, customizable to include author name and a PR identifier.
+delete_branch_after_merge = true  # Whether to delete the branch after the PR is merged
+log_file = "path/to/ghchain.log"  # Path to the log file
+log_level = "INFO"  # Logging level
 
 ```
 
@@ -30,7 +33,7 @@ branch_name_template = "{git_config_author}-{pr_id}"  # Template for naming bran
 Assuming your development branch mydev has multiple commits you want to create PRs for:
 
 ```bash
-ghchain --default-base-branch main
+ghchain process-commits
 ```
 
 This command creates a new branch for each commit and a corresponding PR on GitHub, stacking each PR onto the branch of the previous commit.
@@ -40,13 +43,10 @@ This command creates a new branch for each commit and a corresponding PR on GitH
 -   **\--draft**: Creates each pull request in draft mode.
 -   **\--with-tests**: Run the github workflows that are specified in the .ghchain.toml config of the repository.
 -   **\--run-tests**: Run the github workflows that are specified in the .ghchain.toml config of the repository for the specified branch. If '.' is passed, the current branch will be used.
--   **\--status**: Print the status of the PRs.
--   **\--live-status**: Print the status of the PRs, updating every minute.
--   **\--rebase-onto**: Print the status of the PRs, updating every minute.
 
 ## Usage Example
 
-Let's say that you're working on your dev branch `mydev` and you've cleaned up your changes into 3 commits:
+Let's say that you're working on your dev branch `mydev` and you've cleaned up your changes into 4 commits:
 
 ```
 git log main..mydev
@@ -78,7 +78,7 @@ git log main..mydev
 ```
 
 You would like to make the life of the reviewer easier by creating a pull request for each commit.
-Running `ghchain` will create a new branch for each commit and create a pull request for each of those branches:
+Running `ghchain process-commits` will create a new branch for each commit and create a pull request for each of those branches:
 
 ```
 git log main..mydev
@@ -110,7 +110,7 @@ Date:   Sat Apr 13 14:27:25 2042 +0200
 ```
 
 > [!NOTE]
-> The `with-tests` flag can also be passed to `ghchain`. If it is passed all workflows defined in the `.ghchain.toml` file will be run for each commit.
+> The `with-tests` flag can also be passed to `ghchain process-commits`. If it is passed all workflows defined in the `.ghchain.toml` file will be run for each commit.
 
 The pull requests then look like the following (see [my test repo](https://github.com/HendrikKlug-synthara/mytest/pulls) for reference):
 ![](static/prs_view.png)
@@ -124,7 +124,7 @@ Your reviewer is verry happy with your small pull request, but would like you to
 You stash your new changes from `mydev` and checkout the branch `hk-134`.
 You fix the issue with either `git commit --amend` or `git commit --fixup b64c30667ad23847e981e4c9bafe8eee3ffb0881` and push the changes.
 
-To rebase your whole stack on top of the new commit, you can checkout your `mydev` bracnh and run `ghchain --rebase-onto hk-134`.
+To rebase your whole stack on top of the new commit, you can checkout your `mydev` bracnh and run `ghchain rebase hk-134`.
 This will run a `git rebase --update-refs hk-134` and push the changes to the remote, hence updating your pull requests.
 
 ### Checking status of stack
@@ -158,7 +158,7 @@ This will run a `git rebase --update-refs hk-134` and push the changes to the re
 └────────────────────────────────┴────────┴──────────────────────┴──────────┴────────────────────────────────┘
 ```
 
-You can also run `ghchain --live-status` which refreshes the status every minute.
+You can also run `ghchain status --live` which refreshes the status every minute.
 
 ## Installation
 
