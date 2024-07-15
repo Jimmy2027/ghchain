@@ -30,19 +30,19 @@ log_level = "INFO"  # Logging level
 
 # Usage
 
-Assuming your development branch mydev has multiple commits you want to create PRs for:
-
 ```bash
-ghchain process-commits
+$ ghchain --help
+Options:
+  --help  Show this message and exit.
+
+Commands:
+  land             Merge the specified branch into the configured base...
+  process-commits  Processes commits and creates PRs for each.
+  rebase           Rebase the current branch onto branch, using...
+  run-tests        Run the github workflows that are specified in the...
+  status           Print the status of the PRs
 ```
 
-This command creates a new branch for each commit and a corresponding PR on GitHub, stacking each PR onto the branch of the previous commit.
-
-## Advanced Options
-
--   **\--draft**: Creates each pull request in draft mode.
--   **\--with-tests**: Run the github workflows that are specified in the .ghchain.toml config of the repository.
--   **\--run-tests**: Run the github workflows that are specified in the .ghchain.toml config of the repository for the specified branch. If '.' is passed, the current branch will be used.
 
 ## Usage Example
 
