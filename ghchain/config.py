@@ -1,10 +1,11 @@
 import subprocess
 import sys
-from dataclasses import dataclass
 from pathlib import Path
+from typing import List
 
 import tomllib
 from loguru import logger
+from pydantic import BaseModel, Field, field_validator
 
 logger.remove()
 
@@ -20,38 +21,37 @@ def get_git_base_dir() -> Path:
 CONFIG_FN = get_git_base_dir() / ".ghchain.toml"
 
 
-@dataclass(frozen=True)
-class Config:
-    workflows: list[str]
-    git_username: str
-    base_branch: str = "origin/main"
-    branch_name_template: str = "{git_config_author}-{pr_id}"
-    delete_branch_after_merge: bool = True
+class Config(BaseModel):
+    workflows: List[str] = Field(default_factory=list)
+    git_username: str = Field(default="")
+    base_branch: str = Field(default="origin/main")
+    branch_name_template: str = Field(default="{git_config_author}-{pr_id}")
+    delete_branch_after_merge: bool = Field(default=True)
 
     # logging
-    log_file: Path = get_git_base_dir() / "ghchain.log"
-    log_level: str = "INFO"
+    log_file: Path = Field(default_factory=lambda: get_git_base_dir() / "ghchain.log")
+    log_level: str = Field(default="INFO")
+
+    @field_validator("git_username")
+    @classmethod
+    def set_git_username(cls, v):
+        return v or subprocess.getoutput("git config user.name")
 
     @classmethod
     def from_toml(cls, toml_fn: Path):
-        git_username = subprocess.getoutput("git config user.name")
         if not toml_fn.exists():
             logger.warning(f"No config file found at {toml_fn}. Using default values.")
-            return cls(workflows=[], git_username=git_username)
+            return cls()
         toml_string = toml_fn.read_text()
         toml_dict = tomllib.loads(toml_string)
-        return cls(**toml_dict, git_username=git_username)
+        return cls(**toml_dict)
 
     def to_dict(self):
-        return {
-            "workflows": self.workflows,
-            "git_username": self.git_username,
-            "base_branch": self.base_branch,
-            "branch_name_template": self.branch_name_template,
-            "delete_branch_after_merge": self.delete_branch_after_merge,
-            "log_file": self.log_file,
-            "log_level": self.log_level,
-        }
+        return self.model_dump()
+
+    class Config:
+        allow_mutation = False
+        frozen = True
 
 
 config = Config.from_toml(CONFIG_FN)

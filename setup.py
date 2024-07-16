@@ -11,6 +11,7 @@ requirements = [
     "Click>=7.0",
     "rich",
     "loguru",
+    "pydantic",
 ]
 
 test_requirements = ["pytest>=3", "pytest-order"]
@@ -18,7 +19,7 @@ test_requirements = ["pytest>=3", "pytest-order"]
 setup(
     author="Hendrik Klug",
     author_email="hendrik.klug@gmail.com",
-    python_requires=">=3.6",
+    python_requires=">=3.9",
     classifiers=[
         "Development Status :: 2 - Pre-Alpha",
         "Intended Audience :: Developers",
