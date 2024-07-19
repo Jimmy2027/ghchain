@@ -139,14 +139,13 @@ def test_land(cli_runner, repo_cleanup):
     stack = Stack.create(base_branch="main")
     branch_to_land = stack.branches[-1]
     runner = CliRunner()
-    result = runner.invoke(cli.land, ["-b", branch_to_land])
+    result = runner.invoke(cli.land, ["-t", branch_to_land])
+    assert result.exit_code == 0
 
     # assert that the repo has 3 open pull requests
     prs = run_command(["gh", "pr", "list", "--json", "url"]).stdout
     prs = json.loads(prs)
     assert len(prs) == 3, f"Expected 3 pull requests, got {len(prs)}"
-
-    assert result.exit_code == 0
 
 
 @pytest.mark.order(2)
@@ -207,5 +206,17 @@ def test_main_out_of_date(cli_runner, repo_cleanup):
     assert result.exit_code == 0
 
 
+@pytest.mark.order(2)
+def test_run_tests(cli_runner):
+    """
+    Test the run-tests command.
+    """
+    cli_runner, _ = cli_runner
+
+    result = cli_runner.invoke(cli.run_tests, ["-b", "main"])
+
+    assert result.exit_code == 0
+
+
 if __name__ == "__main__":
-    pytest.main(["-v", __file__, "-s", "-k test_rebase"])
+    pytest.main(["-v", __file__, "-s", "-k test_fixup_commits"])
