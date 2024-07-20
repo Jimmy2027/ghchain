@@ -5,7 +5,7 @@ from typing import List
 
 import tomllib
 from loguru import logger
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 logger.remove()
 
@@ -22,6 +22,8 @@ CONFIG_FN = get_git_base_dir() / ".ghchain.toml"
 
 
 class Config(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     workflows: List[str] = Field(default_factory=list)
     git_username: str = Field(default="")
     base_branch: str = Field(default="origin/main")
@@ -48,10 +50,6 @@ class Config(BaseModel):
 
     def to_dict(self):
         return self.model_dump()
-
-    class Config:
-        allow_mutation = False
-        frozen = True
 
 
 config = Config.from_toml(CONFIG_FN)
