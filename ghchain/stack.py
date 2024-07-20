@@ -1,3 +1,4 @@
+import re
 from typing import List, Optional, Set, Union
 
 from git import GitCommandError
@@ -5,7 +6,7 @@ from loguru import logger
 from pydantic import BaseModel
 
 import ghchain
-from ghchain.git_utils import create_branch_name, get_refs_dict, git_push
+from ghchain.git_utils import create_branch_name, git_push
 from ghchain.github_utils import (
     create_pull_request,
     get_next_gh_id,
@@ -91,30 +92,42 @@ class Stack(BaseModel):
     def create(cls, base_branch: Optional[str] = None) -> "Stack":
         """
         Create a Stack object with commits from the current branch not in the base branch.
+        Whatever branch is currently checked out will be considered the dev branch.
         """
         if not base_branch:
             base_branch = ghchain.config.base_branch
         dev_branch = get_current_branch()
-        commit2message = {
-            e[0]: e[1] for e in get_commits_not_in_base_branch(base_branch)
-        }
-        commits = list(commit2message.keys())
-        commit2branch = {
-            commit: set(find_branches_with_commit(commit)) - {dev_branch}
-            for commit in commits
-        }
 
-        logger.info(f"Creating stack with dev branch: {dev_branch}")
+        logger.debug(f"Creating stack with dev branch: {dev_branch}")
 
-        commit_objects = [
-            Commit(sha=sha, message=message, branches=branches)
-            for sha, message, branches in zip(
-                commits, commit2message.values(), commit2branch.values()
-            )
-        ]
-        return cls(
-            commits=commit_objects, dev_branch=dev_branch, base_branch=base_branch
+        log_output = ghchain.repo.git.log(
+            f"{base_branch}..", "--decorate", "--pretty=oneline"
+        ).splitlines()
+
+        # Regular expression to match the git log output
+        log_pattern = re.compile(
+            r"(?P<sha>[a-f0-9]{40}) \((?P<branches>[^)]+)\) (?P<message>.+)"
         )
+
+        commits = []
+        for line in log_output:
+            match = log_pattern.match(line)
+            if match:
+                sha = match.group("sha")
+                branches = match.group("branches").replace("HEAD -> ", "").split(", ")
+                message = match.group("message")
+
+                # remove the dev branch from the list of branches
+                branches = set(branches) - {dev_branch}
+                commits.append(Commit(sha=sha, branches=branches, message=message))
+            else:
+                # If the line doesn't match the pattern, it might be a commit without branches
+                parts = line.split(" ", 1)
+                sha = parts[0]
+                message = parts[1]
+                commits.append(Commit(sha=sha, branches=set(), message=message))
+
+        return cls(commits=commits, dev_branch=dev_branch, base_branch=base_branch)
 
     @property
     def commit2idx(self):
@@ -135,13 +148,12 @@ class Stack(BaseModel):
         """
         Return the branches in the stack, sorted by order in the stack.
         """
-        refs_dict = get_refs_dict()
         return [
-            b
-            for c in self.commits
-            if c.sha in refs_dict
-            for b in refs_dict[c.sha]
-            if not b == self.dev_branch
+            branch
+            for commit in self.commits
+            if commit.branches
+            for branch in commit.branches
+            if "origin/" not in branch
         ]
 
     def process_commit(

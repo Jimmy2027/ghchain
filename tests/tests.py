@@ -119,15 +119,17 @@ def test_process_commits(cli_runner, repo_cleanup, publish, draft, with_tests):
         args.append("--with-tests")
 
     result = cli_runner.invoke(cli.ghchain_cli, args)
+    if result.exit_code != 0:
+        print(result.output)
 
     assert (
         result.exit_code == 0
-    ), f"Command failed with exit code {result.exit_code}\n{result.output}\n{result.stderr}"
+    ), f"Command failed with exit code {result.exit_code}\n{result.output}"
 
     stack = Stack.create()
     assert len(stack.commits) == 4
-    assert len(stack.commits[0].branches) == 4
-    assert len(stack.commits[-1].branches) == 1
+    for commit in stack.commits:
+        assert len(commit.branches) == 2
 
     # assert that the repo has 4 open pull requests
     if publish or draft:
@@ -166,7 +168,7 @@ def test_land(cli_runner, repo_cleanup):
     cli_runner, _ = cli_runner
 
     create_stack()
-    cli_runner.invoke(cli.process_commits)
+    cli_runner.invoke(cli.ghchain_cli)
 
     stack = Stack.create(base_branch="main")
     branch_to_land = stack.branches[-1]
@@ -189,7 +191,7 @@ def test_multiple_commits_per_pr(cli_runner, repo_cleanup):
 
     # Stack is up to date with origin/main
     create_stack()
-    cli_runner.invoke(cli.process_commits)
+    cli_runner.invoke(cli.ghchain_cli)
 
     stack = Stack.create(base_branch="main")
     bottom_branch = stack.branches[-1]
@@ -204,7 +206,7 @@ def test_multiple_commits_per_pr(cli_runner, repo_cleanup):
 
     stack = Stack.create()
 
-    result = cli_runner.invoke(cli.process_commits)
+    result = cli_runner.invoke(cli.ghchain_cli)
 
     # assert that the repo has 4 open pull requests
     prs = run_command(["gh", "pr", "list", "--json", "url"]).stdout
@@ -228,7 +230,7 @@ def test_main_out_of_date(cli_runner, repo_cleanup):
     run_command(["git", "reset", "--hard", "HEAD~2"])
     run_command(["git", "checkout", "-"])
 
-    result = cli_runner.invoke(cli.process_commits)
+    result = cli_runner.invoke(cli.ghchain_cli)
 
     # assert that the repo has 4 open pull requests
     prs = run_command(["gh", "pr", "list", "--json", "url"]).stdout
