@@ -38,6 +38,9 @@ setup(
         ],
     },
     install_requires=requirements,
+    extras_require={
+        "test": test_requirements,
+    },
     license="MIT license",
     long_description=readme,
     long_description_content_type="text/markdown",
