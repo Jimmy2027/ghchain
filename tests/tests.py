@@ -1,12 +1,14 @@
 import json
 import os
+from pathlib import Path
 import subprocess
 
 import pytest
 from click.testing import CliRunner
+from git import Repo
 
 from ghchain import cli
-from ghchain.config import logger
+from ghchain.config import Config, logger
 from ghchain.git_utils import get_all_branches
 from ghchain.stack import Stack
 from ghchain.utils import run_command
@@ -16,6 +18,7 @@ from ghchain.utils import run_command
 def setup_mytest_repo(tmpdir_factory):
     temp_dir = tmpdir_factory.mktemp("shared_temp_dir")
     os.chdir(temp_dir)
+
     logger.info(f"Current working directory: {os.getcwd()}")
     subprocess.run(
         ["git", "clone", "https://github.com/HendrikKlug-synthara/mytest.git", "."],
@@ -36,7 +39,19 @@ def setup_mytest_repo(tmpdir_factory):
 
 
 @pytest.fixture
-def cli_runner(setup_mytest_repo):
+def patch_git_repo(monkeypatch, setup_mytest_repo):
+    repo = Repo(setup_mytest_repo)
+    monkeypatch.setattr("ghchain.repo", repo)
+
+
+@pytest.fixture
+def patch_config(monkeypatch, setup_mytest_repo):
+    config = Config.from_toml(Path(setup_mytest_repo) / ".ghchain.toml")
+    monkeypatch.setattr("ghchain.config", config)
+
+
+@pytest.fixture
+def cli_runner(setup_mytest_repo, patch_git_repo, patch_config):
     runner = CliRunner()
     yield runner, setup_mytest_repo
 
@@ -54,10 +69,12 @@ def cleanup_repo():
     run_command(["git", "reset", "--hard", "464397e0bf88c66ea09fd05448ad6847c230c2fe"])
     run_command(["git", "push", "-f"])
 
-    branches = set(get_all_branches()) - {"main"}
+    local_branches = set(get_all_branches()) - {"main"}
+    remote_branches = set(get_all_branches(remote=True)) - {"main"}
 
-    for branch in branches:
+    for branch in local_branches:
         run_command(["git", "branch", "-D", branch])
+    for branch in remote_branches:
         run_command(["git", "push", "origin", "--delete", branch])
 
     prs_json = run_command(
@@ -85,23 +102,38 @@ def create_stack():
 
 
 @pytest.mark.order(1)
-@pytest.mark.parametrize("run_workflows", [False, True])
-def test_process_commits(cli_runner, repo_cleanup, run_workflows):
+@pytest.mark.parametrize("publish", [True, False])
+@pytest.mark.parametrize("draft", [True, False])
+@pytest.mark.parametrize("with_tests", [True, False])
+def test_process_commits(cli_runner, repo_cleanup, publish, draft, with_tests):
     cli_runner, _ = cli_runner
 
     create_stack()
 
-    if run_workflows:
-        result = cli_runner.invoke(cli.process_commits, ["--with-tests"])
-    else:
-        result = cli_runner.invoke(cli.process_commits)
+    args = []
+    if publish:
+        args.append("--publish")
+    if draft:
+        args.append("--draft")
+    if with_tests:
+        args.append("--with-tests")
+
+    result = cli_runner.invoke(cli.ghchain_cli, args)
+
+    assert (
+        result.exit_code == 0
+    ), f"Command failed with exit code {result.exit_code}\n{result.output}\n{result.stderr}"
+
+    stack = Stack.create()
+    assert len(stack.commits) == 4
+    assert len(stack.commits[0].branches) == 4
+    assert len(stack.commits[-1].branches) == 1
 
     # assert that the repo has 4 open pull requests
-    prs = run_command(["gh", "pr", "list", "--json", "url"]).stdout
-    prs = json.loads(prs)
-    assert len(prs) == 4, f"Expected 4 pull requests, got {len(prs)}"
-
-    assert result.exit_code == 0
+    if publish or draft:
+        prs = run_command(["gh", "pr", "list", "--json", "url"]).stdout
+        prs = json.loads(prs)
+        assert len(prs) == 4, f"Expected 4 pull requests, got {len(prs)}"
 
 
 @pytest.mark.order(1)
@@ -110,7 +142,7 @@ def test_rebase(cli_runner, repo_cleanup):
 
     # Stack is up to date with origin/main
     create_stack()
-    cli_runner.invoke(cli.process_commits)
+    cli_runner.invoke(cli.ghchain_cli)
 
     stack = Stack.create(base_branch="main")
     bottom_branch = stack.branches[-1]
@@ -219,4 +251,4 @@ def test_run_tests(cli_runner):
 
 
 if __name__ == "__main__":
-    pytest.main(["-v", __file__, "-s", "-k test_fixup_commits"])
+    pytest.main(["-v", __file__, "-s", "-k test_process_commits", "-x"])

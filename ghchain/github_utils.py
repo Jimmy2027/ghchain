@@ -4,7 +4,7 @@ from typing import Optional
 
 import click
 
-from ghchain import config, logger
+import ghchain
 from ghchain.utils import run_command
 
 STACK_LIST_START_MARKER = "<!-- STACK_LIST_START -->"
@@ -14,7 +14,7 @@ WORKFLOW_BADGES_END_MARKER = "<!-- WORKFLOW_BADGES_END -->"
 
 
 def run_workflows(workflow_ids: list[str], branch: str) -> list[str]:
-    logger.info(f"Running workflows for branch {branch}...")
+    ghchain.logger.info(f"Running workflows for branch {branch}...")
     md_badges = []
     for workflow_id in workflow_ids:
         command = ["gh", "workflow", "run", f"{workflow_id}.yml", "--ref", branch]
@@ -22,7 +22,7 @@ def run_workflows(workflow_ids: list[str], branch: str) -> list[str]:
             command,
             check=True,
         )
-        logger.debug(result.stdout)
+        ghchain.logger.debug(result.stdout)
         repo_url = get_repo_url()
 
         workflow_overview_url = (
@@ -46,11 +46,15 @@ def get_repo_url() -> str:
         ["gh", "repo", "view", "--json", "url"],
     )
     # weird hack because I didn't get the --jq '.url' to work
-    return [e for e in repo_url_result.stdout.strip().split('"') if "https" in e][0]
+    urls = [e for e in repo_url_result.stdout.strip().split('"') if "https" in e]
+    if not urls:
+        ghchain.logger.error("Failed to get the repository url.")
+        raise Exception("Failed to get the repository url.")
+    return urls[0]
 
 
 def create_pull_request(base_branch, head_branch, title, body, draft=False):
-    logger.info(f"Creating pull request from {head_branch} to {base_branch}.")
+    ghchain.logger.info(f"Creating pull request from {head_branch} to {base_branch}.")
 
     command = [
         "gh",
@@ -130,8 +134,14 @@ def update_pr_stacklist_description(current_body, pr_url, pr_stack) -> str:
     return updated_body
 
 
-def run_tests_on_pr(pr_url: str, branch: str):
-    md_badges = run_workflows(config.workflows, branch)
+def run_tests_on_pr(branch: str, pr_url: str | None = None):
+    if not ghchain.config.workflows:
+        ghchain.logger.error("No workflows found in the config.")
+        return
+
+    md_badges = run_workflows(ghchain.config.workflows, branch)
+    if pr_url is None:
+        return
     workflow_string = get_workflow_pr_string(md_badges)
 
     current_body = get_pr_body(pr_url.split("/")[-1])
@@ -153,7 +163,7 @@ def run_tests_on_pr(pr_url: str, branch: str):
         ["gh", "pr", "edit", pr_url.split("/")[-1], "--body", updated_body],
         check=True,
     )
-    click.echo(f"PR description updated for PR {pr_url}.")
+    ghchain.logger.debug(f"PR description updated for PR {pr_url}.")
 
 
 def update_pr_descriptions(pr_stack: list[str]):
@@ -163,7 +173,7 @@ def update_pr_descriptions(pr_stack: list[str]):
     """
     pr_url_to_id = {pr: pr.split("/")[-1] for pr in pr_stack}
     prs_str = f"{', '.join([f'#{pr_url_to_id[pr_url]}' for pr_url in pr_stack])}"
-    logger.info(f"Updating PR descriptions of {prs_str}.")
+    ghchain.logger.info(f"Updating PR descriptions of {prs_str}.")
 
     # TODO: check that I'm the author of the PR
     for pr_url in pr_stack:

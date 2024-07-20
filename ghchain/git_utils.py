@@ -5,8 +5,16 @@ from typing import Union
 
 import click
 
-from ghchain import repo
+import ghchain
 from ghchain.utils import logger, run_command
+
+
+def git_push(branch_name: str):
+    try:
+        ghchain.repo.git.push("origin", branch_name)
+    except Exception as e:
+        logger.error(f"Error pushing branch {branch_name}: {e}")
+        raise
 
 
 def parse_git_show_ref(output: str) -> dict:
@@ -37,20 +45,26 @@ def parse_git_show_ref(output: str) -> dict:
 
 
 def get_refs_dict() -> dict:
+    """
+    Return a dictionary of commit hashes and their corresponding branch names.
+    """
     result = run_command(["git", "show-ref", "--head", "--dereference"])
     return parse_git_show_ref(result.stdout)
 
 
-def get_all_branches() -> list[str]:
-    result = run_command(["git", "branch"])
+def get_all_branches(remote=False) -> list[str]:
+    command = ["git", "branch"]
+    if remote:
+        command.append("-r")
+    result = run_command(command)
     branches = result.stdout.splitlines()
     # Remove the leading '*' from the current branch and strip leading/trailing whitespace
-    branches = [branch.replace("*", "").strip() for branch in branches]
+    branches = [
+        branch.replace("*", "").replace("origin/", "").strip()
+        for branch in branches
+        if "HEAD" not in branch
+    ]
     return branches
-
-
-def git_push(branch_name: str):
-    run_command(["git", "push", "origin", branch_name], check=True)
 
 
 def checkout_branch(branch_name: str):
@@ -188,7 +202,7 @@ def local_branch_exists(branch_name):
 def create_branch_name(branch_name_template: str, next_pr_id: int):
     # Get the git author name
     author_name = (
-        repo.config_reader().get_value("user", "name").replace(" ", "_").lower()
+        ghchain.repo.config_reader().get_value("user", "name").replace(" ", "_").lower()
     )
 
     branch_name = branch_name_template.format(

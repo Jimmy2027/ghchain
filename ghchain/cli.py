@@ -3,52 +3,42 @@
 import click
 
 
-@click.group()
-def ghchain_cli():
-    pass
-
-
-@ghchain_cli.command()
-@click.option("--draft", is_flag=True, help="Create the pull request as a draft.")
+@click.group(invoke_without_command=True)
+@click.option("-p", "--publish", is_flag=True, help="Open a PR for each branch")
+@click.option(
+    "--draft",
+    is_flag=True,
+    help="Create the pull request as a draft. This flag sets --publish to True.",
+)
 @click.option(
     "--with-tests",
     is_flag=True,
     help="Run the github workflows that are specified in the .ghchain.toml config of the repository.",
 )
-def process_commits(draft, with_tests):
-    """Processes commits and creates PRs for each."""
-    from ghchain import config, logger
-    from ghchain.git_utils import checkout_branch
-    from ghchain.handlers import handle_existing_branch, handle_new_branch
+@click.pass_context
+def ghchain_cli(ctx, publish, draft, with_tests):
+    """
+    Create a branch for each commit in the stack that doesn't already have one.
+    Optionally, create a PR for each branch and run the github workflows that
+    are specified in the .ghchain.toml config of the repository.
+    """
+
     from ghchain.stack import Stack
 
-    base_branch = config.base_branch
-    stack = Stack.create(base_branch=base_branch)
-    if not stack.commits:
-        logger.info("No commits found that are not in main.")
-        return
+    if ctx.invoked_subcommand is None:
+        if draft:
+            publish = True
+        stack = Stack.create()
+        for commit in stack.commits:
+            pr_created = stack.process_commit(commit, publish, draft, with_tests)
 
-    pr_created = False
-    pr_stack = []
-    for commit_sha, commit_msg in stack.commit2message.items():
-        logger.info(f"Processing commit: {commit_sha} - {commit_msg}")
-        if commit_sha in stack.commits_without_branch:
-            base_branch = handle_new_branch(
-                commit_sha, commit_msg, draft, with_tests, base_branch, pr_stack
-            )
-            pr_created = True
-        else:
-            base_branch = handle_existing_branch(
-                commit_sha, with_tests, stack, pr_stack
-            )
+            if pr_created and not click.confirm(
+                "Do you want to continue with the next commit?", default=True
+            ):
+                break
 
-        if pr_created and not click.confirm(
-            "Do you want to continue with the next commit?", default=True
-        ):
-            break
-        checkout_branch(base_branch)
-
-    checkout_branch(stack.dev_branch)
+    elif ctx.invoked_subcommand == "help":
+        click.echo(ctx.get_help())
 
 
 @ghchain_cli.command()

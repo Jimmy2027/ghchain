@@ -1,21 +1,9 @@
-from unittest.mock import MagicMock
-
-import pytest
-from git import Repo
-
 from ghchain.stack import (
     Stack,
     find_branches_with_commit,
     get_commits_not_in_base_branch,
     get_current_branch,
 )
-
-
-@pytest.fixture
-def mock_repo(monkeypatch):
-    repo = MagicMock(spec=Repo)
-    monkeypatch.setattr("ghchain.stack.repo", repo)
-    return repo
 
 
 def test_find_branches_with_commit(mock_repo):

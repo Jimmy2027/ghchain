@@ -15,10 +15,17 @@ from ghchain.config import Config
 
 repo = Repo(".")
 
-config = Config.from_toml(Path(repo.git_dir).parent / ".ghchain.toml")
+config = Config.from_toml(Path(repo.git_dir).parent.parent.parent / ".ghchain.toml")
 logger.remove()
 logger.add(sys.stderr, level=config.log_level)
 if config.log_file:
     logger.add(config.log_file, level=config.log_level)
-logger.info(f"Loaded config from {repo.git_dir}/.ghchain.toml")
+
+
+if (
+    toml_fn := Path(repo.git_dir)
+    .parent.parent.parent.joinpath(".ghchain.toml")
+    .exists()
+):
+    logger.info(f"Loaded config from {toml_fn}")
 logger.debug(f"Config: {config.to_dict()}")

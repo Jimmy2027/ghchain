@@ -103,7 +103,12 @@ def test_stack_create(temp_git_repo):
     assert stack.commits[0].message == "Add new file"
 
 
-def test_create_branches_for_commits(temp_git_repo, monkeypatch):
+@pytest.mark.parametrize("publish", [True, False])
+@pytest.mark.parametrize("draft", [True, False])
+@pytest.mark.parametrize("with_tests", [True, False])
+def test_create_branches_for_commits(
+    temp_git_repo, monkeypatch, publish, draft, with_tests
+):
     def mock_get_latest_pr_id_generator():
         start_id = 42
         while True:
@@ -116,6 +121,14 @@ def test_create_branches_for_commits(temp_git_repo, monkeypatch):
         return next(mock_get_latest_pr_id_gen)
 
     monkeypatch.setattr("ghchain.stack.get_next_gh_id", mock_get_latest_pr_id)
+    monkeypatch.setattr("ghchain.stack.git_push", lambda branch: None)
+    monkeypatch.setattr(
+        "ghchain.stack.create_pull_request", lambda *args, **kwargs: "_42"
+    )
+    monkeypatch.setattr(
+        "ghchain.stack.update_pr_descriptions", lambda *args, **kwargs: None
+    )
+    monkeypatch.setattr("ghchain.stack.run_tests_on_pr", lambda *args, **kwargs: None)
 
     # Create a new branch and commit
     run_git_command(["git", "checkout", "-b", "feature"], temp_git_repo)
@@ -126,7 +139,8 @@ def test_create_branches_for_commits(temp_git_repo, monkeypatch):
         run_git_command(["git", "commit", "-m", f"Add new file {i}"], temp_git_repo)
 
     stack = Stack.create(base_branch="master")
-    stack.create_branches_for_commits()
+    for commit in stack.commits:
+        stack.process_commit(commit, publish, draft, with_tests)
 
     # Check that a branch was created for the commit
     commit = stack.commits[0]
