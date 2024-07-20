@@ -11,7 +11,7 @@ requirements = [
     "Click>=7.0",
     "rich",
     "loguru",
-    "pydantic",
+    "pydantic>2",
 ]
 
 test_requirements = ["pytest>=3", "pytest-order"]
