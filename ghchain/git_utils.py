@@ -5,6 +5,7 @@ from typing import Union
 
 import click
 
+from ghchain import repo
 from ghchain.utils import logger, run_command
 
 
@@ -186,7 +187,9 @@ def local_branch_exists(branch_name):
 
 def create_branch_name(branch_name_template: str, next_pr_id: int):
     # Get the git author name
-    author_name = subprocess.getoutput("git config user.name").replace(" ", "_").lower()
+    author_name = (
+        repo.config_reader().get_value("user", "name").replace(" ", "_").lower()
+    )
 
     branch_name = branch_name_template.format(
         git_config_author=author_name, pr_id=next_pr_id

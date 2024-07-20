@@ -1,12 +1,12 @@
 from typing import List, Optional, Set, Union
 
-from git import GitCommandError, Repo
+from git import GitCommandError
 from loguru import logger
 from pydantic import BaseModel
 
-from ghchain.config import config
-
-repo = Repo(".")
+import ghchain
+from ghchain.git_utils import create_branch_name
+from ghchain.github_utils import get_next_gh_id
 
 
 def find_branches_with_commit(commit: str) -> List[str]:
@@ -14,7 +14,7 @@ def find_branches_with_commit(commit: str) -> List[str]:
     Find branches containing the specified commit.
     """
     try:
-        branches = repo.git.branch("--contains", commit).split("\n")
+        branches = ghchain.repo.git.branch("--contains", commit).split("\n")
         branches = [branch.replace("*", "").strip() for branch in branches if branch]
         return branches
     except GitCommandError as e:
@@ -32,7 +32,7 @@ def get_commits_not_in_base_branch(
     Get the list of commits not in the base branch.
     """
     try:
-        commits = repo.git.log(
+        commits = ghchain.repo.git.log(
             f"{base_branch}..{target_branch}", "--reverse", "--format=%H %s"
         ).splitlines()
         if ignore_fixup:
@@ -58,7 +58,7 @@ def get_current_branch() -> str:
     Get the current branch name.
     """
     try:
-        return repo.active_branch.name
+        return ghchain.repo.active_branch.name
     except TypeError as e:
         logger.error(f"Error getting current branch: {e}")
         raise
@@ -82,14 +82,15 @@ class Stack(BaseModel):
         Create a Stack object with commits from the current branch not in the base branch.
         """
         if not base_branch:
-            base_branch = config.base_branch
+            base_branch = ghchain.config.base_branch
         dev_branch = get_current_branch()
         commit2message = {
             e[0]: e[1] for e in get_commits_not_in_base_branch(base_branch)
         }
         commits = list(commit2message.keys())
         commit2branch = {
-            commit: set(find_branches_with_commit(commit)) for commit in commits
+            commit: set(find_branches_with_commit(commit)) - {dev_branch}
+            for commit in commits
         }
 
         logger.info(f"Creating stack with dev branch: {dev_branch}")
@@ -103,3 +104,21 @@ class Stack(BaseModel):
         return cls(
             commits=commit_objects, dev_branch=dev_branch, base_branch=base_branch
         )
+
+    def create_branches_for_commits(self):
+        """
+        Create a branch for each commit in the stack that doesn't already have one.
+        """
+        for i, commit in enumerate(self.commits):
+            if not commit.branches:
+                next_pr_id = get_next_gh_id()
+                branch_name = create_branch_name(
+                    ghchain.config.branch_name_template, next_pr_id
+                )
+                logger.info(f"Creating branch {branch_name} for commit {commit.sha}")
+                ghchain.repo.git.branch(branch_name, commit.sha)
+                commit.branches.add(branch_name)
+
+                # Update branches for all previous commits in the stack
+                for predecessor_commit in self.commits[:i]:
+                    predecessor_commit.branches.add(branch_name)

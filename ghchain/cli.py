@@ -17,7 +17,7 @@ def ghchain_cli():
 )
 def process_commits(draft, with_tests):
     """Processes commits and creates PRs for each."""
-    from ghchain.config import config, logger
+    from ghchain import config, logger
     from ghchain.git_utils import checkout_branch
     from ghchain.handlers import handle_existing_branch, handle_new_branch
     from ghchain.stack import Stack
@@ -104,7 +104,7 @@ def rebase(target, interactive):
 )
 def status(live):
     """Print the status of the PRs"""
-    from ghchain.config import config
+    from ghchain import config
     from ghchain.status import print_status
 
     default_base_branch = config.base_branch

@@ -4,7 +4,7 @@ from typing import Optional
 
 import click
 
-from ghchain.config import config, logger
+from ghchain import config, logger
 from ghchain.utils import run_command
 
 STACK_LIST_START_MARKER = "<!-- STACK_LIST_START -->"
@@ -204,9 +204,9 @@ def get_pr_url_for_id(pr_id) -> Optional[str]:
     return next((pr["url"] for pr in prs if pr["number"] == pr_id), None)
 
 
-def get_latest_pr_id() -> int:
+def get_latest_id(which: str) -> int:
     result = run_command(
-        ["gh", "pr", "list", "--json", "number", "--state", "all"],
+        ["gh", which, "list", "--json", "number", "--state", "all"],
     )
     prs = json.loads(result.stdout)
 
@@ -216,6 +216,10 @@ def get_latest_pr_id() -> int:
         return -1
 
     return sorted_prs[0]["number"]
+
+
+def get_next_gh_id() -> int:
+    return max(get_latest_id("pr"), get_latest_id("issue")) + 1
 
 
 def get_pr_id_for_branch(branch_name) -> Optional[str]:

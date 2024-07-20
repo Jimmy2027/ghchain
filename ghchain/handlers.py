@@ -1,7 +1,7 @@
 import json
 import click
 
-from ghchain.config import config, logger
+from ghchain import config, logger
 from ghchain.git_utils import (
     checkout_branch,
     create_branch_from_commit,
