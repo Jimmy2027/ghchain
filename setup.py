@@ -12,7 +12,7 @@ requirements = [
     "rich",
     "loguru",
     "pydantic>2",
-    "python-git",
+    "GitPython",
 ]
 
 test_requirements = ["pytest>=3", "pytest-order"]
