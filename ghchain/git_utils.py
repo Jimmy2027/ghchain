@@ -1,7 +1,6 @@
 import os
 import subprocess
 from collections import defaultdict
-from typing import Union
 
 import click
 
@@ -212,27 +211,6 @@ def create_branch_name(branch_name_template: str, next_pr_id: int):
     return branch_name
 
 
-def get_commits_not_in_base_branch(
-    base_branch, ignore_fixup=True, target_branch="HEAD", only_sha=False
-) -> Union[list[str], list[list[str]]]:
-    commits = subprocess.getoutput(
-        f"git log {base_branch}..{target_branch} --reverse --format='%H %s'"
-    ).splitlines()
-    if ignore_fixup:
-        commits = [
-            line.split(" ", 1)
-            for line in commits
-            if not line.split(" ", 1)[1].startswith("fixup!")
-        ]
-    else:
-        commits = [line.split(" ", 1) for line in commits]
-
-    if only_sha:
-        return [commit[0] for commit in commits]
-    else:
-        return commits
-
-
 def create_branch_from_commit(branch_name, commit_sha):
     run_command(["git", "branch", branch_name, commit_sha])
 
@@ -251,5 +229,8 @@ def get_current_branch() -> str:
     """
     Get the current branch name.
     """
-    result = subprocess.run(["git", "branch", "--show-current"], capture_output=True)
-    return result.stdout.decode().strip()
+    try:
+        return ghchain.repo.active_branch.name
+    except TypeError as e:
+        ghchain.logger.error(f"Error getting current branch: {e}")
+        raise

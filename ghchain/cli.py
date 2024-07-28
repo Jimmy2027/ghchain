@@ -43,22 +43,20 @@ def ghchain_cli(ctx, publish, draft, with_tests):
 
 @ghchain_cli.command()
 @click.option(
-    "--target",
-    "-t",
+    "--branch",
+    "-b",
     type=str,
     default=None,
-    help=(
-        "The target branch or commit to which the configured base branch will be updated."
-    ),
+    help=("The target branch to which the configured base branch will be updated."),
 )
-def land(target):
+def land(branch):
     """
-    Merge the specified targetr into the configured base branch.
+    Merge the specified branch into the configured base branch.
     """
     from ghchain.git_utils import get_current_branch
     from ghchain.handlers import handle_land
 
-    branch_name = get_current_branch() if target == "." or not target else target
+    branch_name = get_current_branch() if branch == "." or not branch else branch
     handle_land(branch_name)
 
 

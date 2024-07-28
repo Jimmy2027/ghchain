@@ -128,14 +128,19 @@ def test_process_commits(cli_runner, repo_cleanup, publish, draft, with_tests):
 
     stack = Stack.create()
     assert len(stack.commits) == 4
-    for commit in stack.commits:
-        assert len(commit.branches) == 2
+    if publish or draft:
+        for commit in stack.commits:
+            assert commit.branch is not None
 
     # assert that the repo has 4 open pull requests
     if publish or draft:
-        prs = run_command(["gh", "pr", "list", "--json", "url"]).stdout
+        prs = run_command(["gh", "pr", "list", "--json", "baseRefName"]).stdout
         prs = json.loads(prs)
         assert len(prs) == 4, f"Expected 4 pull requests, got {len(prs)}"
+
+        branches = (["main"] + [commit.branch for commit in stack.commits[:-1]])[::-1]
+        for idx, pr in enumerate(prs):
+            assert pr["baseRefName"] == branches[idx]
 
 
 @pytest.mark.order(1)
@@ -168,12 +173,14 @@ def test_land(cli_runner, repo_cleanup):
     cli_runner, _ = cli_runner
 
     create_stack()
-    cli_runner.invoke(cli.ghchain_cli)
+
+    result = cli_runner.invoke(cli.ghchain_cli, ["--publish"])
+    assert result.exit_code == 0
 
     stack = Stack.create(base_branch="main")
-    branch_to_land = stack.branches[-1]
+    branch_to_land = stack.branches[0]
     runner = CliRunner()
-    result = runner.invoke(cli.land, ["-t", branch_to_land])
+    result = runner.invoke(cli.land, ["-b", branch_to_land])
     assert result.exit_code == 0
 
     # assert that the repo has 3 open pull requests
@@ -253,4 +260,4 @@ def test_run_tests(cli_runner):
 
 
 if __name__ == "__main__":
-    pytest.main(["-v", __file__, "-s", "-k test_process_commits", "-x"])
+    pytest.main(["-v", __file__, "-s", "-k test_land", "-x"])

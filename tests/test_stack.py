@@ -10,8 +10,6 @@ from ghchain import config
 from ghchain.git_utils import create_branch_name
 from ghchain.stack import (
     Stack,
-    find_branches_with_commit,
-    get_commits_not_in_base_branch,
     get_current_branch,
 )
 
@@ -59,25 +57,6 @@ def run_git_command(command, cwd):
         command, cwd=cwd, check=True, capture_output=True, text=True
     )
     return result.stdout.strip()
-
-
-def test_find_branches_with_commit(temp_git_repo):
-    commit_sha = run_git_command(["git", "rev-parse", "HEAD"], temp_git_repo)
-    branches = find_branches_with_commit(commit_sha)
-    assert branches == ["master"]
-
-
-def test_get_commits_not_in_base_branch(temp_git_repo):
-    # Create a new branch and commit
-    run_git_command(["git", "checkout", "-b", "feature"], temp_git_repo)
-    new_file = Path(temp_git_repo) / "new_file.txt"
-    new_file.write_text("New content")
-    run_git_command(["git", "add", "new_file.txt"], temp_git_repo)
-    run_git_command(["git", "commit", "-m", "Add new file"], temp_git_repo)
-
-    commits = get_commits_not_in_base_branch("master", target_branch="feature")
-    assert len(commits) == 1
-    assert commits[0][1] == "Add new file"
 
 
 def test_get_current_branch(temp_git_repo):
