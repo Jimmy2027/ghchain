@@ -63,6 +63,15 @@ def repo_cleanup():
     yield
 
 
+def commit_fixup(branch):
+    run_command(["git", "checkout", branch])
+    run_command(["touch", "new_file"])
+    run_command(["git", "add", "new_file"])
+    run_command(["git", "commit", "-m", "fixup! new file"])
+    run_command(["git", "push"])
+    run_command(["git", "checkout", "-"])
+
+
 def cleanup_repo():
     """Delete all current branches and pull requests and create a new branch mydev."""
     run_command(["git", "checkout", "main"])
@@ -156,12 +165,7 @@ def test_rebase(cli_runner, repo_cleanup):
     stack = Stack.create(base_branch="main")
     bottom_branch = stack.branches[0]
 
-    run_command(["git", "checkout", bottom_branch])
-    run_command(["touch", "new_file"])
-    run_command(["git", "add", "new_file"])
-    run_command(["git", "commit", "-m", "new file"])
-    run_command(["git", "push"])
-    run_command(["git", "checkout", "-"])
+    commit_fixup(bottom_branch)
     result = cli_runner.invoke(cli.rebase, [bottom_branch])
 
     assert result.exit_code == 0
@@ -183,6 +187,61 @@ def test_land(cli_runner, repo_cleanup):
     branch_to_land = stack.branches[0]
     runner = CliRunner()
     result = runner.invoke(cli.land, ["-b", branch_to_land])
+    assert result.exit_code == 0
+
+    # assert that the repo has 3 open pull requests
+    prs = run_command(["gh", "pr", "list", "--json", "url"]).stdout
+    prs = json.loads(prs)
+    assert len(prs) == 3, f"Expected 3 pull requests, got {len(prs)}"
+
+
+@pytest.mark.order(1)
+def test_land_local_out_of_date(cli_runner, repo_cleanup):
+    cli_runner, _ = cli_runner
+
+    create_stack()
+
+    result = cli_runner.invoke(cli.ghchain_cli, ["--publish"])
+    assert result.exit_code == 0
+
+    # make the branch to merge out of date with remote
+    stack = Stack.create(base_branch="main")
+    bottom_branch = stack.branches[0]
+    bottom_commit = stack.commits[0].sha
+    commit_fixup(bottom_branch)
+    # reset the branch to the original commit
+    run_command(["git", "checkout", bottom_branch])
+    run_command(["git", "reset", "--hard", bottom_commit])
+    run_command(["git", "checkout", "-"])
+
+    runner = CliRunner()
+    result = runner.invoke(cli.land, ["-b", bottom_branch], input="y\n")
+    assert result.exit_code == 0
+
+    # assert that the repo has 3 open pull requests
+    prs = run_command(["gh", "pr", "list", "--json", "url"]).stdout
+    prs = json.loads(prs)
+    assert len(prs) == 3, f"Expected 3 pull requests, got {len(prs)}"
+
+
+@pytest.mark.order(1)
+def test_land_no_local_branch(cli_runner, repo_cleanup):
+    cli_runner, _ = cli_runner
+
+    create_stack()
+
+    result = cli_runner.invoke(cli.ghchain_cli, ["--publish"])
+    assert result.exit_code == 0
+
+    # make the branch to merge out of date with remote
+    stack = Stack.create(base_branch="main")
+    bottom_branch = stack.branches[0]
+
+    # delete the local branch
+    run_command(["git", "branch", "-D", bottom_branch])
+
+    runner = CliRunner()
+    result = runner.invoke(cli.land, ["-b", bottom_branch], input="y\n")
     assert result.exit_code == 0
 
     # assert that the repo has 3 open pull requests
@@ -262,4 +321,4 @@ def test_run_tests(cli_runner):
 
 
 if __name__ == "__main__":
-    pytest.main(["-v", __file__, "-s", "-k test_rebase", "-x"])
+    pytest.main(["-v", __file__, "-s", "-k test_land_no_local_branch", "-x"])
