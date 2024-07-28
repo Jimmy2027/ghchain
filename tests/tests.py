@@ -200,7 +200,7 @@ def test_multiple_commits_per_pr(cli_runner, repo_cleanup):
 
     # Stack is up to date with origin/main
     create_stack()
-    cli_runner.invoke(cli.ghchain_cli)
+    cli_runner.invoke(cli.ghchain_cli, ["--publish"])
 
     stack = Stack.create(base_branch="main")
     bottom_branch = stack.branches[-1]
@@ -215,7 +215,7 @@ def test_multiple_commits_per_pr(cli_runner, repo_cleanup):
 
     stack = Stack.create()
 
-    result = cli_runner.invoke(cli.ghchain_cli)
+    result = cli_runner.invoke(cli.ghchain_cli, ["--publish"])
 
     # assert that the repo has 4 open pull requests
     prs = run_command(["gh", "pr", "list", "--json", "url"]).stdout
@@ -239,7 +239,7 @@ def test_main_out_of_date(cli_runner, repo_cleanup):
     run_command(["git", "reset", "--hard", "HEAD~2"])
     run_command(["git", "checkout", "-"])
 
-    result = cli_runner.invoke(cli.ghchain_cli)
+    result = cli_runner.invoke(cli.ghchain_cli, ["--publish"])
 
     # assert that the repo has 4 open pull requests
     prs = run_command(["gh", "pr", "list", "--json", "url"]).stdout
