@@ -149,10 +149,12 @@ def test_rebase(cli_runner, repo_cleanup):
 
     # Stack is up to date with origin/main
     create_stack()
-    cli_runner.invoke(cli.ghchain_cli)
+    result = cli_runner.invoke(cli.ghchain_cli)
+
+    assert result.exit_code == 0
 
     stack = Stack.create(base_branch="main")
-    bottom_branch = stack.branches[-1]
+    bottom_branch = stack.branches[0]
 
     run_command(["git", "checkout", bottom_branch])
     run_command(["touch", "new_file"])
@@ -254,10 +256,10 @@ def test_run_tests(cli_runner):
     """
     cli_runner, _ = cli_runner
 
-    result = cli_runner.invoke(cli.run_tests, ["-b", "main"])
+    result = cli_runner.invoke(cli.run_workflows, ["-b", "main"])
 
     assert result.exit_code == 0
 
 
 if __name__ == "__main__":
-    pytest.main(["-v", __file__, "-s", "-k test_land", "-x"])
+    pytest.main(["-v", __file__, "-s", "-k test_rebase", "-x"])

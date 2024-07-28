@@ -107,7 +107,7 @@ def status(live):
     default=None,
     help=("Branch name or PR ID to run the github workflows for."),
 )
-def run_tests(branch):
+def run_workflows(branch):
     """
     Run the github workflows that are specified in the .ghchain.toml config of the repository for the specified branch.
     If '.' or nothing is passed, the current branch will be used.
