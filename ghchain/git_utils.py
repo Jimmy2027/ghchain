@@ -1,11 +1,19 @@
 import os
 import subprocess
 from collections import defaultdict
-from typing import Union
 
 import click
 
+import ghchain
 from ghchain.utils import logger, run_command
+
+
+def git_push(branch_name: str):
+    try:
+        ghchain.repo.git.push("origin", branch_name)
+    except Exception as e:
+        logger.error(f"Error pushing branch {branch_name}: {e}")
+        raise
 
 
 def parse_git_show_ref(output: str) -> dict:
@@ -36,20 +44,26 @@ def parse_git_show_ref(output: str) -> dict:
 
 
 def get_refs_dict() -> dict:
+    """
+    Return a dictionary of commit hashes and their corresponding branch names.
+    """
     result = run_command(["git", "show-ref", "--head", "--dereference"])
     return parse_git_show_ref(result.stdout)
 
 
-def get_all_branches() -> list[str]:
-    result = run_command(["git", "branch"])
+def get_all_branches(remote=False) -> list[str]:
+    command = ["git", "branch"]
+    if remote:
+        command.append("-r")
+    result = run_command(command)
     branches = result.stdout.splitlines()
     # Remove the leading '*' from the current branch and strip leading/trailing whitespace
-    branches = [branch.replace("*", "").strip() for branch in branches]
+    branches = [
+        branch.replace("*", "").replace("origin/", "").strip()
+        for branch in branches
+        if "HEAD" not in branch
+    ]
     return branches
-
-
-def git_push(branch_name: str):
-    run_command(["git", "push", "origin", branch_name], check=True)
 
 
 def checkout_branch(branch_name: str):
@@ -186,34 +200,15 @@ def local_branch_exists(branch_name):
 
 def create_branch_name(branch_name_template: str, next_pr_id: int):
     # Get the git author name
-    author_name = subprocess.getoutput("git config user.name").replace(" ", "_").lower()
+    author_name = (
+        ghchain.repo.config_reader().get_value("user", "name").replace(" ", "_").lower()
+    )
 
     branch_name = branch_name_template.format(
         git_config_author=author_name, pr_id=next_pr_id
     )
 
     return branch_name
-
-
-def get_commits_not_in_base_branch(
-    base_branch, ignore_fixup=True, target_branch="HEAD", only_sha=False
-) -> Union[list[str], list[list[str]]]:
-    commits = subprocess.getoutput(
-        f"git log {base_branch}..{target_branch} --reverse --format='%H %s'"
-    ).splitlines()
-    if ignore_fixup:
-        commits = [
-            line.split(" ", 1)
-            for line in commits
-            if not line.split(" ", 1)[1].startswith("fixup!")
-        ]
-    else:
-        commits = [line.split(" ", 1) for line in commits]
-
-    if only_sha:
-        return [commit[0] for commit in commits]
-    else:
-        return commits
 
 
 def create_branch_from_commit(branch_name, commit_sha):
@@ -234,5 +229,8 @@ def get_current_branch() -> str:
     """
     Get the current branch name.
     """
-    result = subprocess.run(["git", "branch", "--show-current"], capture_output=True)
-    return result.stdout.decode().strip()
+    try:
+        return ghchain.repo.active_branch.name
+    except TypeError as e:
+        ghchain.logger.error(f"Error getting current branch: {e}")
+        raise

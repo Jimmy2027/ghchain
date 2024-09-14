@@ -3,72 +3,66 @@
 import click
 
 
-@click.group()
-def ghchain_cli():
-    pass
-
-
-@ghchain_cli.command()
-@click.option("--draft", is_flag=True, help="Create the pull request as a draft.")
+@click.group(invoke_without_command=True)
+@click.option(
+    "-p",
+    "--create-pr",
+    is_flag=True,
+    help="If set to True, a pull request will be opened for every commit.",
+)
+@click.option(
+    "--draft",
+    is_flag=True,
+    help="Create the pull request as a draft. This flag sets --create-pr to True.",
+)
 @click.option(
     "--with-tests",
     is_flag=True,
     help="Run the github workflows that are specified in the .ghchain.toml config of the repository.",
 )
-def process_commits(draft, with_tests):
-    """Processes commits and creates PRs for each."""
-    from ghchain.config import config, logger
-    from ghchain.git_utils import checkout_branch
-    from ghchain.handlers import handle_existing_branch, handle_new_branch
+@click.pass_context
+def ghchain_cli(ctx, create_pr, draft, with_tests):
+    """
+    Create a branch for each commit in the stack that doesn't already have one.
+    Optionally, create a PR for each branch and run the github workflows that
+    are specified in the .ghchain.toml config of the repository.
+    """
+
     from ghchain.stack import Stack
 
-    base_branch = config.base_branch
-    stack = Stack.create(base_branch=base_branch)
-    if not stack.commits:
-        logger.info("No commits found that are not in main.")
-        return
+    if ctx.invoked_subcommand is None:
+        if draft:
+            # when draft is passed, we know that the user wants to publish the PRs
+            create_pr = True
+        stack = Stack.create()
+        for commit in stack.commits:
+            pr_created = stack.process_commit(commit, create_pr, draft, with_tests)
 
-    pr_created = False
-    pr_stack = []
-    for commit_sha, commit_msg in stack.commit2message.items():
-        logger.info(f"Processing commit: {commit_sha} - {commit_msg}")
-        if commit_sha in stack.commits_without_branch:
-            base_branch = handle_new_branch(
-                commit_sha, commit_msg, draft, with_tests, base_branch, pr_stack
-            )
-            pr_created = True
-        else:
-            base_branch = handle_existing_branch(
-                commit_sha, with_tests, stack, pr_stack
-            )
+            if pr_created and not click.confirm(
+                "Do you want to continue with the next commit?", default=True
+            ):
+                break
 
-        if pr_created and not click.confirm(
-            "Do you want to continue with the next commit?", default=True
-        ):
-            break
-        checkout_branch(base_branch)
-
-    checkout_branch(stack.dev_branch)
+    elif ctx.invoked_subcommand == "help":
+        click.echo(ctx.get_help())
 
 
 @ghchain_cli.command()
 @click.option(
-    "--target",
-    "-t",
+    "--branch",
+    "-b",
     type=str,
     default=None,
-    help=(
-        "The target branch or commit to which the configured base branch will be updated."
-    ),
+    help=("The target branch to which the configured base branch will be updated."),
 )
-def land(target):
+def land(branch):
     """
-    Merge the specified targetr into the configured base branch.
+    Merge the specified branch into the configured base branch.
     """
     from ghchain.git_utils import get_current_branch
     from ghchain.handlers import handle_land
 
-    branch_name = get_current_branch() if target == "." or not target else target
+    branch_name = get_current_branch() if branch == "." or not branch else branch
     handle_land(branch_name)
 
 
@@ -83,7 +77,7 @@ def land(target):
     is_flag=True,
     help=(
         "Do an interactive rebase. This will allow you to edit "
-        "the commit messages and the order of the commits."
+        "the commit messages and the order of the commits between branches."
     ),
 )
 def rebase(target, interactive):
@@ -104,7 +98,7 @@ def rebase(target, interactive):
 )
 def status(live):
     """Print the status of the PRs"""
-    from ghchain.config import config
+    from ghchain import config
     from ghchain.status import print_status
 
     default_base_branch = config.base_branch
@@ -119,7 +113,7 @@ def status(live):
     default=None,
     help=("Branch name or PR ID to run the github workflows for."),
 )
-def run_tests(branch):
+def run_workflows(branch):
     """
     Run the github workflows that are specified in the .ghchain.toml config of the repository for the specified branch.
     If '.' or nothing is passed, the current branch will be used.
@@ -142,7 +136,7 @@ def run_tests(branch):
     if not pr_url:
         click.echo(f"No open PR found for branch '{branch_name}'.")
         return
-    run_tests_on_pr(pr_url, branch_name)
+    run_tests_on_pr(branch=branch_name, pr_url=pr_url)
 
 
 if __name__ == "__main__":
