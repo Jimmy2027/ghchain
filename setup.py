@@ -11,7 +11,8 @@ requirements = [
     "Click>=7.0",
     "rich",
     "loguru",
-    "pydantic",
+    "pydantic>2",
+    "GitPython",
 ]
 
 test_requirements = ["pytest>=3", "pytest-order"]
@@ -38,6 +39,9 @@ setup(
         ],
     },
     install_requires=requirements,
+    extras_require={
+        "test": test_requirements,
+    },
     license="MIT license",
     long_description=readme,
     long_description_content_type="text/markdown",

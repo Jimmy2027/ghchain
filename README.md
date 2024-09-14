@@ -33,14 +33,20 @@ log_level = "INFO"  # Logging level
 ```bash
 $ ghchain --help
 Options:
-  --help  Show this message and exit.
+  -p, --create-pr  If set to True, a pull request will be opened for every
+                   commit.
+  --draft          Create the pull request as a draft. This flag sets
+                   --create_pr to True.
+  --with-tests     Run the github workflows that are specified in the
+                   .ghchain.toml config of the repository.
+  --help           Show this message and exit.
 
 Commands:
-  land             Merge the specified branch into the configured base...
-  process-commits  Processes commits and creates PRs for each.
-  rebase           Rebase the current branch onto branch, using...
-  run-tests        Run the github workflows that are specified in the...
-  status           Print the status of the PRs
+  land           Merge the specified branch into the configured base branch.
+  rebase         Rebase the current branch onto branch, using...
+  run-workflows  Run the github workflows that are specified in the...
+  status         Print the status of the PRs
+
 ```
 
 
@@ -78,7 +84,7 @@ git log main..mydev
 ```
 
 You would like to make the life of the reviewer easier by creating a pull request for each commit.
-Running `ghchain process-commits` will create a new branch for each commit and create a pull request for each of those branches:
+Running `ghchain -p` will create a new branch for each commit and create a pull request for each of those branches:
 
 ```
 git log main..mydev
@@ -127,38 +133,8 @@ You fix the issue with either `git commit --amend` or `git commit --fixup b64c30
 To rebase your whole stack on top of the new commit, you can checkout your `mydev` bracnh and run `ghchain rebase hk-134`.
 This will run a `git rebase --update-refs hk-134` and push the changes to the remote, hence updating your pull requests.
 
-### Checking status of stack
-
-`ghchain` provides a `status` command to check the status of the stack:
-
-```console
-┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ Branch                         ┃ PR ID  ┃ Review Decision      ┃ Draft    ┃ Workflow Status                ┃
-┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
-│ hk-136                         │ 136    │                      │ False    │                                │
-│                                │        │                      │          │ workflow_1: ('completed',      │
-│                                │        │                      │          │ 'success')                     │
-│                                │        │                      │          │ workflow_2: ('completed',      │
-│                                │        │                      │          │ 'success')                     │
-│ hk-135                         │ 135    │                      │ False    │                                │
-│                                │        │                      │          │ workflow_1: ('completed',      │
-│                                │        │                      │          │ 'success')                     │
-│                                │        │                      │          │ workflow_2: ('completed',      │
-│                                │        │                      │          │ 'success')                     │
-│ hk-134                         │ 134    │                      │ False    │                                │
-│                                │        │                      │          │ workflow_1: ('completed',      │
-│                                │        │                      │          │ 'success')                     │
-│                                │        │                      │          │ workflow_2: ('completed',      │
-│                                │        │                      │          │ 'success')                     │
-│ hk-133                         │ 133    │                      │ False    │                                │
-│                                │        │                      │          │ workflow_1: ('completed',      │
-│                                │        │                      │          │ 'success')                     │
-│                                │        │                      │          │ workflow_2: ('completed',      │
-│                                │        │                      │          │ 'success')                     │
-└────────────────────────────────┴────────┴──────────────────────┴──────────┴────────────────────────────────┘
-```
-
-You can also run `ghchain status --live` which refreshes the status every minute.
+> [!NOTE]
+> You can also pass the --interactive flag to the rebase command to run an interactive rebase.
 
 ## Installation
 
