@@ -308,7 +308,8 @@ def test_main_out_of_date(cli_runner, repo_cleanup):
 
 
 @pytest.mark.order(2)
-def test_run_tests(cli_runner, repo_cleanup):
+@pytest.mark.parametrize("with_prs", [True, False])
+def test_run_tests(cli_runner, repo_cleanup, with_prs):
     """
     Test the run-tests command.
     """
@@ -316,7 +317,7 @@ def test_run_tests(cli_runner, repo_cleanup):
 
     # create stack
     create_stack()
-    cli_runner.invoke(cli.ghchain_cli, ["--create-pr"])
+    cli_runner.invoke(cli.ghchain_cli, ["--create-pr" if with_prs else ""])
 
     stack = Stack.create()
     result = cli_runner.invoke(cli.run_workflows, ["-b", stack.commits[0].branch])

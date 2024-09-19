@@ -133,9 +133,7 @@ def run_workflows(branch):
         else branch
     )
     pr_url = get_pr_url_for_branch(branch_name)
-    if not pr_url:
-        click.echo(f"No open PR found for branch '{branch_name}'.")
-        return
+
     run_tests_on_pr(branch=branch_name, pr_url=pr_url)
 
 

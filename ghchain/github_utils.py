@@ -141,6 +141,9 @@ def run_tests_on_pr(branch: str, pr_url: str | None = None):
 
     md_badges = run_workflows(ghchain.config.workflows, branch)
     if pr_url is None:
+        ghchain.logger.debug(
+            f"No PR found for branch {branch}. Not updating PR description."
+        )
         return
     workflow_string = get_workflow_pr_string(md_badges)
 
