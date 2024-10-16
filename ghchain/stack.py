@@ -16,34 +16,63 @@ from ghchain.github_utils import (
 )
 from ghchain.status import (
     PrStatus,
+    StatusCheck,
     WorkflowStatus,
     mergeable_status_to_ansi,
     review_decision_to_ansi,
 )
 
 
+def status_to_emoji(status: str):
+    status_to_emoji_mapping = {
+        "success": "✅",
+        "failure": "❌",
+        "neutral": "⚪",
+        "cancelled": "🛑",
+        "timed_out": "⏰",
+        "in_progress": "🔄",
+        "completed": "✅",
+    }
+
+    if status in status_to_emoji_mapping:
+        return status_to_emoji_mapping[status]
+    else:
+        return status
+
+
+def status_check_to_note(status_checks: dict[str, StatusCheck]):
+    status_checks_df = pd.DataFrame(
+        [
+            {
+                k: status_to_emoji(v.lower())
+                for k, v in status_check.__dict__.items()
+                if k in ["name", "conclusion", "status"]
+            }
+            for status_check in status_checks.values()
+        ]
+    ).set_index("name")
+
+    return "\n\n[[status_checks]]\n\n" + status_checks_df.to_markdown()
+
+
 def workflow_statuses_to_note(workflow_statuses: list[WorkflowStatus]):
     workflow_statuses_df = pd.DataFrame(
         [
             {
-                k: v.replace("success", "✅")
-                .replace("failure", "❌")
-                .replace("neutral", "⚪")
-                .replace("cancelled", "🛑")
-                .replace("timed_out", "⏰")
-                .replace("in_progress", "🔄")
-                .replace("completed", "✅")
+                k: status_to_emoji(v)
                 for k, v in ws.to_dict().items()
                 if k in {"status", "conclusion", "name"}
             }
             for ws in workflow_statuses
         ]
     ).set_index("name")
-    return "\n[[workflow_statuses]]\n" + workflow_statuses_df.to_markdown()
+    return "\n\n[[workflow_statuses]]\n\n" + workflow_statuses_df.to_markdown()
 
 
 def get_commit_notes(pr_url: str, pr_status: PrStatus):
     notes_str = f"[ghchain]\npr url = {pr_url}\n"
+    if not pr_status:
+        return notes_str
     notes_str += (
         f"Review Decision = {review_decision_to_ansi(pr_status.review_decision)}\n"
     )
@@ -59,6 +88,8 @@ def get_commit_notes(pr_url: str, pr_status: PrStatus):
     # convert workflow_statuses to a markdonw table
     if pr_status.workflow_statuses:
         notes_str += workflow_statuses_to_note(pr_status.workflow_statuses)
+    if pr_status.status_checks:
+        notes_str += status_check_to_note(pr_status.status_checks)
 
     return notes_str
 

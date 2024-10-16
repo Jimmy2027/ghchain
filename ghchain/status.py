@@ -1,8 +1,7 @@
-from enum import Enum, StrEnum
 import json
 from dataclasses import dataclass
+from enum import Enum, StrEnum
 from typing import Any, Dict, Optional
-
 
 import ghchain
 from ghchain.github_utils import get_pr_id_for_branch
@@ -64,14 +63,23 @@ class WorkflowStatus:
         return self.__dict__
 
 
+class StatusCheckConclusion(StrEnum):
+    SUCCESS = "SUCCESS"
+    FAILURE = "FAILURE"
+
+
+class StatusCheckStatus(StrEnum):
+    COMPLETED = "COMPLETED"
+
+
 @dataclass
 class StatusCheck:
     completedAt: str
-    conclusion: str
+    conclusion: StatusCheckConclusion
     detailsUrl: str
     name: str
     startedAt: str
-    status: str
+    status: StatusCheckStatus
     workflowName: str
 
 
