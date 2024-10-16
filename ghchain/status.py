@@ -1,14 +1,10 @@
+from enum import Enum, StrEnum
 import json
-import time
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Dict, Optional
 
-from rich.console import Console
-from rich.live import Live
-from rich.table import Table
 
-from ghchain import config
-from ghchain.stack import Stack
+import ghchain
 from ghchain.github_utils import get_pr_id_for_branch
 from ghchain.utils import run_command
 
@@ -64,6 +60,9 @@ class WorkflowStatus:
             return WorkflowStatus.from_line(line, workflow_yml_fn)
         return None
 
+    def to_dict(self) -> Dict[str, any]:
+        return self.__dict__
+
 
 @dataclass
 class StatusCheck:
@@ -76,13 +75,75 @@ class StatusCheck:
     workflowName: str
 
 
+def string_to_ansi_color(string: str, color: str) -> str:
+    """
+    Wrap a string in ANSI color codes.
+    """
+    colors = {
+        "black": "\033[30m",
+        "red": "\033[31m",
+        "green": "\033[32m",
+        "yellow": "\033[33m",
+        "blue": "\033[34m",
+        "magenta": "\033[35m",
+        "cyan": "\033[36m",
+        "white": "\033[37m",
+    }
+    return f"{colors[color]}{string}\033[0m"
+
+
+class ReviewDecision(StrEnum):
+    APPROVED = "APPROVED"
+    CHANGES_REQUESTED = "CHANGES_REQUESTED"
+    REVIEW_REQUIRED = "REVIEW_REQUIRED"
+    NONE = ""
+
+
+review_decision_colors = {
+    ReviewDecision.APPROVED: "green",
+    ReviewDecision.CHANGES_REQUESTED: "yellow",
+    ReviewDecision.REVIEW_REQUIRED: "red",
+    ReviewDecision.NONE: "black",
+}
+
+
+def review_decision_to_ansi(review_decision: ReviewDecision) -> str:
+    """
+    Convert a review decision to an ANSI color escaped string.
+    """
+    if (
+        review_decision not in review_decision_colors
+        or review_decision == ReviewDecision.NONE
+    ):
+        return review_decision.value
+    color = review_decision_colors[review_decision]
+    return string_to_ansi_color(review_decision.value, color)
+
+
+class MergeableStatus(str, Enum):
+    MERGEABLE = "MERGEABLE"
+    CONFLICTING = "CONFLICTING"
+    UNKNOWN = "UNKNOWN"
+
+
+def mergeable_status_to_ansi(mergeable_status: MergeableStatus) -> str:
+    """
+    Convert a mergeable status to an ANSI color escaped string.
+    """
+    if mergeable_status == MergeableStatus.MERGEABLE:
+        return string_to_ansi_color(mergeable_status.value, "green")
+    elif mergeable_status == MergeableStatus.CONFLICTING:
+        return string_to_ansi_color(mergeable_status.value, "red")
+    return mergeable_status.value
+
+
 @dataclass
 class PrStatus:
     branchname: str
     pr_id: int
-    review_decision: bool
+    review_decision: ReviewDecision
     is_draft: bool
-    is_mergeable: bool
+    is_mergeable: MergeableStatus
     title: str
     workflow_statuses: Optional[list[WorkflowStatus]] = None
     status_checks: Optional[dict[str, StatusCheck]] = None
@@ -93,8 +154,10 @@ class PrStatus:
         if not pr_id:
             return None
         workflow_statuses = []
-        for workflow in config.workflows:
-            workflow_statuses.append(WorkflowStatus.create(workflow, branchname))
+        for workflow in ghchain.config.workflows:
+            workflow_status = WorkflowStatus.create(workflow, branchname)
+            if workflow_status:
+                workflow_statuses.append(workflow_status)
 
         # TODO: add statusCheckRollup
         result = run_command(
@@ -113,9 +176,9 @@ class PrStatus:
             branchname=branchname,
             pr_id=int(pr_id),
             workflow_statuses=workflow_statuses,
-            review_decision=result_dict["reviewDecision"],
+            review_decision=ReviewDecision(result_dict["reviewDecision"]),
             is_draft=result_dict["isDraft"],
-            is_mergeable=result_dict["mergeable"],
+            is_mergeable=MergeableStatus(result_dict["mergeable"]),
             status_checks={
                 status["name"]: StatusCheck(
                     **{
@@ -130,6 +193,20 @@ class PrStatus:
             else None,
             title=result_dict["title"],
         )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "branchname": self.branchname,
+            "pr_id": self.pr_id,
+            "review_decision": self.review_decision.value,
+            "is_draft": self.is_draft,
+            "is_mergeable": self.is_mergeable.value,
+            "title": self.title,
+            "workflow_statuses": [ws.to_dict() for ws in self.workflow_statuses or []],
+            # "status_checks": {
+            #     k: v.to_dict() for k, v in (self.status_checks or {}).items()
+            # },
+        }
 
 
 @dataclass
@@ -198,72 +275,3 @@ class StatusRow:
             self.workflow_status,
             self.status_checks,
         ]
-
-
-@dataclass
-class StackStatus:
-    pr_statuses: list[PrStatus]
-    stack: Optional[Stack] = None
-
-    @classmethod
-    def from_stack(cls, stack: Stack):
-        pr_statuses = []
-        for branch in stack.branches:
-            pr_statuses.append(PrStatus.from_branchname(branch))
-
-        return cls(pr_statuses=pr_statuses, stack=stack)
-
-    def create_table_data(self):
-        table_data = []
-
-        for pr_status in self.pr_statuses:
-            if not pr_status:
-                continue
-
-            table_data.append(StatusRow.from_pr_status(pr_status).to_row())
-
-        return table_data
-
-    def get_status_table(self):
-        table = Table(show_header=True, header_style="bold magenta")
-        table.add_column("Branch", style="dim", width=30)
-        table.add_column("PR ID", style="dim", width=6)
-        table.add_column("Review Decision", style="dim", width=20)
-        table.add_column("Draft", style="dim", width=8)
-        table.add_column("Workflow Status", style="dim", width=30)
-        table.add_column("Status Checks", style="dim", width=30)  # New column
-
-        table_data = self.create_table_data()
-
-        for i, row in enumerate(table_data):
-            table.add_row(*row)
-            # add a divider between rows, except for the last row
-            if i < len(table_data) - 1:
-                table.add_row("-----", "-----", "-----", "-----", "-----", "-----")
-
-        return table
-
-    def print_status(self):
-        console = Console()
-        console.print(self.get_status_table())
-
-
-def print_status(base_branch: str = "main", live: bool = False):
-    if live:
-        with Live(
-            StackStatus.from_stack(
-                Stack.create(base_branch=base_branch)
-            ).get_status_table(),
-            refresh_per_second=1,
-        ) as live_context:
-            while True:
-                time.sleep(60)
-                live_context.console.clear()
-                live_context.update(
-                    StackStatus.from_stack(
-                        Stack.create(base_branch=base_branch)
-                    ).get_status_table()
-                )
-        return
-    StackStatus.from_stack(Stack.create(base_branch=base_branch)).print_status()
-    return

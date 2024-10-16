@@ -2,6 +2,7 @@ import json
 import os
 import subprocess
 from pathlib import Path
+import time
 
 import pytest
 from click.testing import CliRunner
@@ -317,13 +318,18 @@ def test_run_tests(cli_runner, repo_cleanup, with_prs):
 
     # create stack
     create_stack()
-    cli_runner.invoke(cli.ghchain_cli, ["--create-pr" if with_prs else ""])
+    command_args = ["--create-pr"] if with_prs else []
+    result = cli_runner.invoke(cli.ghchain_cli, command_args)
+    assert result.exit_code == 0
 
     stack = Stack.create()
     result = cli_runner.invoke(cli.run_workflows, ["-b", stack.commits[0].branch])
+
+    time.sleep(30)
+    Stack.create()
 
     assert result.exit_code == 0
 
 
 if __name__ == "__main__":
-    pytest.main(["-v", __file__, "-s", "-k test_run_tests", "-x"])
+    pytest.main(["-v", __file__, "-s", "-x", "-k test_run_tests"])

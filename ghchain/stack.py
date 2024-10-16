@@ -1,6 +1,7 @@
 import re
 from typing import List, Optional
 
+import pandas as pd
 from loguru import logger
 from pydantic import BaseModel
 
@@ -13,11 +14,58 @@ from ghchain.github_utils import (
     run_tests_on_pr,
     update_pr_descriptions,
 )
+from ghchain.status import (
+    PrStatus,
+    WorkflowStatus,
+    mergeable_status_to_ansi,
+    review_decision_to_ansi,
+)
+
+
+def workflow_statuses_to_note(workflow_statuses: list[WorkflowStatus]):
+    workflow_statuses_df = pd.DataFrame(
+        [
+            {
+                k: v.replace("success", "✅")
+                .replace("failure", "❌")
+                .replace("neutral", "⚪")
+                .replace("cancelled", "🛑")
+                .replace("timed_out", "⏰")
+                .replace("in_progress", "🔄")
+                .replace("completed", "✅")
+                for k, v in ws.to_dict().items()
+                if k in {"status", "conclusion", "name"}
+            }
+            for ws in workflow_statuses
+        ]
+    ).set_index("name")
+    return "\n[[workflow_statuses]]\n" + workflow_statuses_df.to_markdown()
+
+
+def get_commit_notes(pr_url: str, pr_status: PrStatus):
+    notes_str = f"[ghchain]\npr url = {pr_url}\n"
+    notes_str += (
+        f"Review Decision = {review_decision_to_ansi(pr_status.review_decision)}\n"
+    )
+    notes_str += f"Mergable = {mergeable_status_to_ansi(pr_status.is_mergeable)}\n"
+    notes_str += "\n".join(
+        [
+            f"{key} = {value}"
+            for key, value in pr_status.to_dict().items()
+            if key in ["is_draft", "title"]
+        ]
+    )
+
+    # convert workflow_statuses to a markdonw table
+    if pr_status.workflow_statuses:
+        notes_str += workflow_statuses_to_note(pr_status.workflow_statuses)
+
+    return notes_str
 
 
 class Commit(BaseModel):
     """
-    Commit object with sha, message, branch, and pr_url.
+    Commit object with sha, message, branch, pr_url, notes, and pr_status.
     It is expected that every non-fixup commit has its corresponding branch.
     """
 
@@ -25,16 +73,37 @@ class Commit(BaseModel):
     message: str
     branch: str | None = None
     pr_url: Optional[str] = None
+    notes: Optional[str] = None
+    pr_status: Optional[PrStatus] = None
 
-    def __post_init__(self):
+    class Config:
+        arbitrary_types_allowed = True
+
+    def __init__(self, **data):
+        super().__init__(**data)
+        if not self.branch:
+            return
+
+        self.pr_status = PrStatus.from_branchname(self.branch)
+
         if not self.pr_url:
             self.pr_url = get_pr_url_for_branch(self.branch)
+
+        # Fetch and parse commit notes
+        self.notes = get_commit_notes(self.pr_url, self.pr_status)
+
+        self.update_notes()
+
+    def update_notes(self):
+        # Write the updated notes back to the git notes
+
+        ghchain.repo.git.notes("add", "-f", "-m", self.notes, self.sha)
 
     @property
     def pr_id(self) -> Optional[int]:
         if not self.pr_url:
             return None
-        return int(self.pr_url.split("/")[-1])
+        return int(self.pr_url.rstrip("/").split("/")[-1])
 
     @property
     def is_fixup(self) -> bool:
@@ -68,7 +137,7 @@ class Stack(BaseModel):
         )
 
         commits = []
-        # reverse log output to start from the bottom of the stack
+        # Reverse log output to start from the bottom of the stack
         for line in log_output[::-1]:
             match = log_pattern.match(line)
             if match:
@@ -81,7 +150,7 @@ class Stack(BaseModel):
                 )
                 message = match.group("message")
 
-                # remove the dev branch from the list of branches
+                # Remove the dev branch from the list of branches
                 branches = set(branches) - {dev_branch}
                 if len(branches) > 1:
                     error_message = f"Commit {sha} has multiple branches: {branches}. This is not supported."
@@ -93,11 +162,10 @@ class Stack(BaseModel):
                     sha=sha,
                     branch=branch,
                     message=message,
-                    pr_url=get_pr_url_for_branch(branch) if branch else None,
                 )
                 commits.append(commit)
                 if commit.is_fixup:
-                    # find the previous commit that is not a fixup and mark it with the same branch
+                    # Find the previous commit that is not a fixup and mark it with the same branch
                     target_commit = next(
                         (
                             commit
@@ -159,12 +227,12 @@ class Stack(BaseModel):
             ghchain.repo.git.branch(branch_name, commit.sha)
             commit.branch = branch_name
 
-            # push the branch to the remote
+            # Push the branch to the remote
             git_push(branch_name)
         else:
             branch_name = commit.branch
 
-        # if the commit is not a fixup and it does not have a PR, create one
+        # If the commit is not a fixup and it does not have a PR, create one
         if not commit.is_fixup and create_pr and not commit.pr_id:
             commit.pr_url = create_pull_request(
                 base_branch=ghchain.config.base_branch.replace("origin/", "")

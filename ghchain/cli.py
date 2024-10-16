@@ -55,6 +55,23 @@ def ghchain_cli(ctx, create_pr, draft, with_tests):
     default=None,
     help=("The target branch to which the configured base branch will be updated."),
 )
+def refresh(branch):
+    """
+    Merge the specified branch into the configured base branch.
+    """
+    from ghchain.stack import Stack
+
+    Stack.create()
+
+
+@ghchain_cli.command()
+@click.option(
+    "--branch",
+    "-b",
+    type=str,
+    default=None,
+    help=("The target branch to which the configured base branch will be updated."),
+)
 def land(branch):
     """
     Merge the specified branch into the configured base branch.
