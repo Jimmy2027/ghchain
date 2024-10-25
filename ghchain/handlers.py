@@ -36,6 +36,7 @@ def handle_land(branch):
             )
             return
 
+    # update the base branch
     run_command(
         [
             "git",
@@ -84,7 +85,7 @@ def handle_land(branch):
                 check=True,
             )
 
-        # Delete the remote branch
-        run_command(["git", "push", "origin", "--delete", branch], check=True)
+        # Delete the remote branch, don't check since the branch might already be deleted
+        run_command(["git", "push", "origin", "--delete", branch], check=False)
         # Delete the local branch
         run_command(["git", "branch", "-D", branch], check=True)
