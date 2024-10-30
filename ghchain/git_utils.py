@@ -51,21 +51,6 @@ def get_refs_dict() -> dict:
     return parse_git_show_ref(result.stdout)
 
 
-def get_all_branches(remote=False) -> list[str]:
-    command = ["git", "branch"]
-    if remote:
-        command.append("-r")
-    result = run_command(command)
-    branches = result.stdout.splitlines()
-    # Remove the leading '*' from the current branch and strip leading/trailing whitespace
-    branches = [
-        branch.replace("*", "").replace("origin/", "").strip()
-        for branch in branches
-        if "HEAD" not in branch
-    ]
-    return branches
-
-
 def checkout_branch(branch_name: str):
     run_command(["git", "checkout", branch_name])
 
@@ -234,3 +219,26 @@ def get_current_branch() -> str:
     except TypeError as e:
         ghchain.logger.error(f"Error getting current branch: {e}")
         raise
+
+
+def get_all_branches() -> list[str]:
+    """
+    Get all branches in the repository.
+    """
+    return [branch.name for branch in ghchain.repo.branches]
+
+
+def get_commit_message_to_branch_mapping() -> dict[str, str]:
+    """
+    Get a mapping of commit messages to branch names.
+
+    This function returns a dictionary where the keys are commit messages and the values are the branch names
+    that contain the corresponding commit.
+
+    Returns:
+        dict[str, str]: A dictionary mapping commit messages to branch names.
+    """
+    return {
+        branch.commit.message.replace("\n", ""): branch.name
+        for branch in ghchain.repo.branches
+    }

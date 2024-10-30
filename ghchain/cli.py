@@ -1,5 +1,6 @@
 """Console script for ghchain."""
 
+import subprocess
 import click
 
 
@@ -152,6 +153,49 @@ def run_workflows(branch):
     pr_url = get_pr_url_for_branch(branch_name)
 
     run_tests_on_pr(branch=branch_name, pr_url=pr_url)
+
+
+@ghchain_cli.command()
+def fix_refs():
+    """
+    If you messed up your stack with a rebase and lost the connections between the commits and the branches,
+    this command will attempt to fix it.
+    If you notice the mistake soon enough, you can switch back to your previous ref using reflog... If not,
+    this function might help.
+    """
+    from ghchain.stack import Stack
+    from ghchain.git_utils import get_commit_message_to_branch_mapping, run_command
+
+    stack = Stack.create()
+
+    commit_msg_to_branch = get_commit_message_to_branch_mapping()
+    for commit in stack.commits:
+        if not commit.branch:
+            branch = commit_msg_to_branch.get(commit.message)
+            if branch:
+                # Ask user if they want to reset the branch to the commit
+                if click.confirm(
+                    f"Do you want to reset the branch '{branch}' to the commit '{commit.sha}'?"
+                    f"\n Commit message:\n{commit.message}"
+                ):
+                    try:
+                        # Reset the branch to the commit
+                        run_command(
+                            ["git", "branch", "-f", branch, commit.sha], check=True
+                        )
+                        click.echo(
+                            f"Branch '{branch}' has been reset to commit '{commit.sha}'."
+                        )
+                    except subprocess.CalledProcessError as e:
+                        click.echo(
+                            f"Failed to reset branch '{branch}' to commit '{commit.sha}': {e}"
+                        )
+                else:
+                    click.echo(
+                        f"Skipped resetting branch '{branch}' to commit '{commit.sha}'."
+                    )
+
+    click.echo("Finished attempting to fix refs.")
 
 
 if __name__ == "__main__":

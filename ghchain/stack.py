@@ -6,7 +6,12 @@ from loguru import logger
 from pydantic import BaseModel
 
 import ghchain
-from ghchain.git_utils import create_branch_name, get_current_branch, git_push
+from ghchain.git_utils import (
+    create_branch_name,
+    get_all_branches,
+    get_current_branch,
+    git_push,
+)
 from ghchain.github_utils import (
     create_pull_request,
     get_next_gh_id,
@@ -21,6 +26,7 @@ from ghchain.status import (
     mergeable_status_to_ansi,
     review_decision_to_ansi,
 )
+from ghchain.utils import run_command
 
 
 def status_to_emoji(status: str):
@@ -289,3 +295,32 @@ class Stack(BaseModel):
             run_tests_on_pr(branch_name, commit.pr_url)
 
         return pr_created
+
+
+def find_branch_of_rebased_commit(commit: Commit) -> str:
+    """
+    When a commit is rebased, the commit hash changes. This function checks if there is any branch
+    that has a commit with the message as top commit. If there is, it returns the branch name.
+    """
+    # Get the commit message
+    commit_message = commit.message
+
+    # List all branches
+    result = get_all_branches()
+    branches = result.stdout.splitlines()
+
+    # Check the top commit message of each branch
+    for branch in branches:
+        branch = branch.strip().replace(
+            "* ", ""
+        )  # Remove leading '*' for the current branch
+        result = run_command(
+            ["git", "log", "-1", "--pretty=%B", branch],
+            check=True,
+        )
+        top_commit_message = result.stdout.strip()
+        if top_commit_message == commit_message:
+            logger.debug(f"Found branch {branch} with commit message {commit_message}")
+            return branch
+
+    return None
