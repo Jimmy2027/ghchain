@@ -59,6 +59,26 @@ class WorkflowStatus:
             return WorkflowStatus.from_line(line, workflow_yml_fn)
         return None
 
+    @classmethod
+    def from_commit_id(cls, workflow_yml_fn: str, commit_id: str):
+        result = run_command(
+            [
+                "gh",
+                "run",
+                "list",
+                "--commit",
+                commit_id,
+                "--workflow",
+                f"{workflow_yml_fn}.yml",
+            ],
+            check=True,
+        )
+        lines = result.stdout.splitlines()
+        if lines:
+            line = result.stdout.splitlines()[0]
+            return WorkflowStatus.from_line(line, "")
+        return None
+
     def to_dict(self) -> Dict[str, any]:
         return self.__dict__
 
@@ -153,7 +173,6 @@ class PrStatus:
     is_draft: bool
     is_mergeable: MergeableStatus
     title: str
-    workflow_statuses: Optional[list[WorkflowStatus]] = None
     status_checks: Optional[dict[str, StatusCheck]] = None
 
     @classmethod
@@ -183,7 +202,6 @@ class PrStatus:
         return cls(
             branchname=branchname,
             pr_id=int(pr_id),
-            workflow_statuses=workflow_statuses,
             review_decision=ReviewDecision(result_dict["reviewDecision"]),
             is_draft=result_dict["isDraft"],
             is_mergeable=MergeableStatus(result_dict["mergeable"]),
@@ -210,7 +228,6 @@ class PrStatus:
             "is_draft": self.is_draft,
             "is_mergeable": self.is_mergeable.value,
             "title": self.title,
-            "workflow_statuses": [ws.to_dict() for ws in self.workflow_statuses or []],
             # "status_checks": {
             #     k: v.to_dict() for k, v in (self.status_checks or {}).items()
             # },

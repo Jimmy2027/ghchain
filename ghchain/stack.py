@@ -75,26 +75,32 @@ def workflow_statuses_to_note(workflow_statuses: list[WorkflowStatus]):
     return "\n\n[[workflow_statuses]]\n\n" + workflow_statuses_df.to_markdown()
 
 
-def get_commit_notes(pr_url: str, pr_status: PrStatus):
+def get_commit_notes(
+    pr_url: str | None = None,
+    pr_status: PrStatus | None = None,
+    workflow_statuses: list[WorkflowStatus] | None = None,
+):
+    if not pr_status and not pr_url and not workflow_statuses:
+        return ""
+
     notes_str = f"[ghchain]\npr url = {pr_url}\n"
-    if not pr_status:
-        return notes_str
-    notes_str += (
-        f"Review Decision = {review_decision_to_ansi(pr_status.review_decision)}\n"
-    )
-    notes_str += f"Mergable = {mergeable_status_to_ansi(pr_status.is_mergeable)}\n"
-    notes_str += "\n".join(
-        [
-            f"{key} = {value}"
-            for key, value in pr_status.to_dict().items()
-            if key in ["is_draft", "title"]
-        ]
-    )
+    if pr_status:
+        notes_str += (
+            f"Review Decision = {review_decision_to_ansi(pr_status.review_decision)}\n"
+        )
+        notes_str += f"Mergable = {mergeable_status_to_ansi(pr_status.is_mergeable)}\n"
+        notes_str += "\n".join(
+            [
+                f"{key} = {value}"
+                for key, value in pr_status.to_dict().items()
+                if key in ["is_draft", "title"]
+            ]
+        )
 
     # convert workflow_statuses to a markdonw table
-    if pr_status.workflow_statuses:
-        notes_str += workflow_statuses_to_note(pr_status.workflow_statuses)
-    if pr_status.status_checks:
+    if workflow_statuses:
+        notes_str += workflow_statuses_to_note(workflow_statuses)
+    if pr_status and pr_status.status_checks:
         notes_str += status_check_to_note(pr_status.status_checks)
 
     return notes_str
@@ -112,22 +118,34 @@ class Commit(BaseModel):
     pr_url: Optional[str] = None
     notes: Optional[str] = None
     pr_status: Optional[PrStatus] = None
+    workflow_statuses: Optional[list[WorkflowStatus]] = None
 
     class Config:
         arbitrary_types_allowed = True
 
     def __init__(self, **data):
         super().__init__(**data)
-        if not self.branch:
-            return
 
-        self.pr_status = PrStatus.from_branchname(self.branch)
+        self.workflow_statuses = []
+        for workflow in ghchain.config.workflows:
+            workflow_status = WorkflowStatus.from_commit_id(
+                workflow, commit_id=data["sha"]
+            )
+            if workflow_status:
+                self.workflow_statuses.append(workflow_status)
 
-        if not self.pr_url:
-            self.pr_url = get_pr_url_for_branch(self.branch)
+        if self.branch:
+            self.pr_status = PrStatus.from_branchname(self.branch)
+
+            if not self.pr_url:
+                self.pr_url = get_pr_url_for_branch(self.branch)
 
         # Fetch and parse commit notes
-        self.notes = get_commit_notes(self.pr_url, self.pr_status)
+        self.notes = get_commit_notes(
+            pr_url=self.pr_url,
+            pr_status=self.pr_status,
+            workflow_statuses=self.workflow_statuses,
+        )
 
         self.update_notes()
 
