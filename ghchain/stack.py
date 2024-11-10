@@ -16,7 +16,7 @@ from ghchain.git_utils import (
 from ghchain.github_utils import (
     create_pull_request,
     get_next_gh_id,
-    run_tests_on_pr,
+    run_tests_on_branch,
     update_pr_descriptions,
 )
 from ghchain.status import (
@@ -251,7 +251,7 @@ class Stack(BaseModel):
             )
 
         if with_tests:
-            run_tests_on_pr(branch_name, commit.pr_url)
+            run_tests_on_branch(branch_name, commit.pr_url)
 
         return pr_created
 

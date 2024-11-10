@@ -134,7 +134,19 @@ def update_pr_stacklist_description(current_body, pr_url, pr_stack) -> str:
     return updated_body
 
 
-def run_tests_on_pr(branch: str, pr_url: str | None = None):
+def run_tests_on_branch(branch: str, pr_url: str | None = None):
+    """
+    Runs the configured workflows on the specified branch
+    and updates the PR description with the workflow results if a PR URL is provided.
+
+    Args:
+        branch (str): The branch on which to run the workflows.
+        pr_url (str | None, optional): The URL of the pull request to update.
+            If None, the PR description is not updated.
+
+    Returns:
+        None
+    """
     if not ghchain.config.workflows:
         ghchain.logger.error("No workflows found in the config.")
         return
