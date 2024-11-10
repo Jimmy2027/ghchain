@@ -20,7 +20,14 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
 ]
-dependencies = ["Click>=7.0", "rich", "loguru", "pydantic>2", "GitPython"]
+dependencies = [
+    "Click>=7.0",
+    "rich",
+    "loguru",
+    "pydantic>2",
+    "GitPython",
+    "pandas",
+]
 requires-python = ">=3.9"
 
 [tool.setuptools]
