@@ -26,6 +26,21 @@ def ghchain_cli(ctx, create_pr, draft, with_tests):
     Create a branch for each commit in the stack that doesn't already have one.
     Optionally, create a PR for each branch and run the github workflows that
     are specified in the .ghchain.toml config of the repository.
+
+    Usage:
+
+    ghchain: will create a branch for each commit in the stack that doesn't already have one
+      and push it to the remote.
+
+    ghchain --create-pr: will create a branch for each commit in the stack that doesn't already have one,
+      push it to the remote and create a PR for each branch.
+
+    ghchain --draft: will create a branch for each commit in the stack that doesn't already have one,
+      push it to the remote and create a draft PR for each branch.
+
+    ghchain --with-tests: will create a branch for each commit in the stack that doesn't already have one,
+      push it to the remote and run the github workflows that are specified in the
+      .ghchain.toml config of the repository.
     """
 
     from ghchain.stack import Stack
@@ -123,7 +138,7 @@ def run_workflows(branch):
     from ghchain.github_utils import (
         get_branch_name_for_pr_id,
         get_pr_url_for_branch,
-        run_tests_on_pr,
+        run_tests_on_branch,
     )
 
     branch_name = (
@@ -135,7 +150,7 @@ def run_workflows(branch):
     )
     pr_url = get_pr_url_for_branch(branch_name)
 
-    run_tests_on_pr(branch=branch_name, pr_url=pr_url)
+    run_tests_on_branch(branch=branch_name, pr_url=pr_url)
 
 
 @ghchain_cli.command()

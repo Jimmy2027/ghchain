@@ -43,6 +43,24 @@ Usage: ghchain [OPTIONS] COMMAND [ARGS]...
   Optionally, create a PR for each branch and run the github workflows that
   are specified in the .ghchain.toml config of the repository.
 
+  Usage:
+
+  ghchain: will create a branch for each commit in the stack that doesn't
+  already have one    and push it to the remote.
+
+  ghchain --create-pr: will create a branch for each commit in the stack that
+  doesn't already have one,   push it to the remote and create a PR for each
+  branch.
+
+  ghchain --draft: will create a branch for each commit in the stack that
+  doesn't already have one,   push it to the remote and create a draft PR for
+  each branch.
+
+  ghchain --with-tests: will create a branch for each commit in the stack that
+  doesn't already have one,   push it to the remote and run the github
+  workflows that are specified in the    .ghchain.toml config of the
+  repository.
+
 Options:
   -p, --create-pr  If set to True, a pull request will be opened for every
                    commit.
@@ -58,7 +76,6 @@ Commands:
   rebase         Rebase the current branch onto branch, using...
   refresh        Merge the specified branch into the configured base branch.
   run-workflows  Run the github workflows that are specified in the...
-
 ```
 
 
