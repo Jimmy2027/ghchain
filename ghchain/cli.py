@@ -1,6 +1,5 @@
 """Console script for ghchain."""
 
-import subprocess
 import click
 
 
@@ -147,6 +146,7 @@ def fix_refs():
     If you notice the mistake soon enough, you can switch back to your previous ref using reflog... If not,
     this function might help.
     """
+    import subprocess
     from ghchain.stack import Stack
     from ghchain.git_utils import get_commit_message_to_branch_mapping, run_command
 
