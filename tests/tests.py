@@ -313,6 +313,7 @@ def test_main_out_of_date(cli_runner, repo_cleanup):
 def test_run_tests(cli_runner, repo_cleanup, with_prs):
     """
     Test the run-tests command.
+    Run the workflows for the first commit in the stack.
     """
     cli_runner, _ = cli_runner
 
@@ -326,7 +327,12 @@ def test_run_tests(cli_runner, repo_cleanup, with_prs):
     result = cli_runner.invoke(cli.run_workflows, ["-b", stack.commits[0].branch])
 
     time.sleep(30)
-    Stack.create()
+    stack = Stack.create()
+
+    # verify that the commit notes have been updated
+    assert (
+        "[[workflow_statuses]]" in stack.commits[0].notes
+    ), f"Expected [[workflow_statuses]] in notes, got {stack.commits[0].notes}"
 
     assert result.exit_code == 0
 
