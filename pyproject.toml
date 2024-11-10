@@ -1,0 +1,36 @@
+[build-system]
+build-backend = "setuptools.build_meta"
+requires = ["setuptools>=61", "setuptools-scm[toml]>=6.2.3"]
+
+[project]
+name = "ghchain"
+version = "0.1.0"
+description = "Chain pull requests from your devbranch's commits."
+readme = "README.md"
+license = { text = "MIT license" }
+authors = [{ name = "Hendrik Klug", email = "hendrik.klug@gmail.com" }]
+keywords = ["ghchain"]
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Natural Language :: English",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+dependencies = ["Click>=7.0", "rich", "loguru", "pydantic>2", "GitPython"]
+requires-python = ">=3.9"
+
+[tool.setuptools]
+packages = { find = { include = ["ghchain", "ghchain.*"] } }
+
+[project.urls]
+Homepage = "https://github.com/Jimmy2027/ghchain"
+
+[project.scripts]
+ghchain = "ghchain.cli:ghchain_cli"
+
+[project.optional-dependencies]
+test = ["pytest>=3"]
