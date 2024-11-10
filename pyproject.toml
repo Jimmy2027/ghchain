@@ -27,6 +27,7 @@ dependencies = [
     "pydantic>2",
     "GitPython",
     "pandas",
+    "tabulate",
 ]
 requires-python = ">=3.9"
 
