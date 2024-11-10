@@ -109,22 +109,6 @@ def rebase(target, interactive):
 
 @ghchain_cli.command()
 @click.option(
-    "--live",
-    "-l",
-    is_flag=True,
-    help="Print the status of the PRs, updating every minute.",
-)
-def status(live):
-    """Print the status of the PRs"""
-    from ghchain import config
-    from ghchain.status import print_status
-
-    default_base_branch = config.base_branch
-    print_status(base_branch=default_base_branch, live=live)
-
-
-@ghchain_cli.command()
-@click.option(
     "--branch",
     "-b",
     type=str,
