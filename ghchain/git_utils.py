@@ -221,11 +221,25 @@ def get_current_branch() -> str:
         raise
 
 
-def get_all_branches() -> list[str]:
+def get_all_branches(remote: bool = False) -> list[str]:
     """
     Get all branches in the repository.
     """
+    if remote:
+        return get_all_remote_branches()
     return [branch.name for branch in ghchain.repo.branches]
+
+
+def get_all_remote_branches() -> list[str]:
+    """
+    Get all remote branches in the repository.
+    """
+    remote_branches = []
+    for remote in ghchain.repo.remotes:
+        for branch in remote.refs:
+            if "HEAD" not in branch.name:
+                remote_branches.append(branch.name.replace(f"{remote.name}/", ""))
+    return remote_branches
 
 
 def get_commit_message_to_branch_mapping() -> dict[str, str]:
