@@ -196,6 +196,9 @@ Notes:
 ```
 
 ## Installation
+ghchain uses the github cli [gh](https://cli.github.com/) to interact with the github api.
+It needs to be installed and configured before `ghchain` can be used.
+
 
 ### pip release version
 
