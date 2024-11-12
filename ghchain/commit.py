@@ -137,7 +137,8 @@ class Commit(BaseModel):
     def update_notes(self):
         # Write the updated notes back to the git notes
 
-        ghchain.repo.git.notes("add", "-f", "-m", self.notes, self.sha)
+        if self.notes:
+            ghchain.repo.git.notes("add", "-f", "-m", self.notes, self.sha)
 
     @property
     def pr_id(self) -> Optional[int]:
