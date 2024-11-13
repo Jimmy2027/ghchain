@@ -51,12 +51,7 @@ def ghchain_cli(ctx, create_pr, draft, with_tests):
             create_pr = True
         stack = Stack.create()
         for commit in stack.commits:
-            pr_created = stack.process_commit(commit, create_pr, draft, with_tests)
-
-            if pr_created and not click.confirm(
-                "Do you want to continue with the next commit?", default=True
-            ):
-                break
+            stack.process_commit(commit, create_pr, draft, with_tests)
 
     elif ctx.invoked_subcommand == "help":
         click.echo(ctx.get_help())

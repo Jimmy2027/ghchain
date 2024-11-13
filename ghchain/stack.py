@@ -1,6 +1,7 @@
 import re
 from typing import List, Optional
 
+import click
 from loguru import logger
 from pydantic import BaseModel
 
@@ -133,6 +134,11 @@ class Stack(BaseModel):
             branch_id = max([get_next_gh_id(), *[id + 1 for id in self.branch_ids]])
             branch_name = create_branch_name(
                 ghchain.config.branch_name_template, branch_id
+            )
+            click.confirm(
+                f"Create branch {branch_name} for commit {commit.sha}?\n{commit.message}\n",
+                abort=True,
+                default=True,
             )
             logger.info(f"Creating branch {branch_name} for commit {commit.sha}")
             ghchain.repo.git.branch(branch_name, commit.sha)
