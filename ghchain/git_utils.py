@@ -1,6 +1,5 @@
 import os
 import subprocess
-from collections import defaultdict
 
 import click
 
@@ -14,64 +13,6 @@ def git_push(branch_name: str):
     except Exception as e:
         logger.error(f"Error pushing branch {branch_name}: {e}")
         raise
-
-
-def parse_git_show_ref(output: str) -> dict:
-    """
-    Parse the output of 'git show-ref --head --dereference' into a dictionary.
-
-    Parameters:
-        output (str): The output string from the 'git show-ref --head --dereference' command.
-
-    Returns:
-        dict: A dictionary with commit hashes as keys and lists of reference names as values.
-    """
-    refs_dict = {}
-    for line in output.splitlines():
-        parts = line.split()
-        if len(parts) != 2:
-            continue  # skip lines that don't have exactly two parts
-        commit_hash, ref_name = parts
-
-        # Skip non-branch references
-        if "heads" not in ref_name:
-            continue
-
-        if commit_hash not in refs_dict:
-            refs_dict[commit_hash] = []
-        refs_dict[commit_hash].append(ref_name.replace("refs/heads/", ""))
-    return refs_dict
-
-
-def get_refs_dict() -> dict:
-    """
-    Return a dictionary of commit hashes and their corresponding branch names.
-    """
-    result = run_command(["git", "show-ref", "--head", "--dereference"])
-    return parse_git_show_ref(result.stdout)
-
-
-def checkout_branch(branch_name: str):
-    run_command(["git", "checkout", branch_name])
-
-
-def update_branch(branch_name: str):
-    return run_command(["git", "pull", "origin", branch_name])
-
-
-def update_base_branch(base_branch: str):
-    """
-    Update the base branch with the latest changes from origin
-    """
-    checkout_branch(base_branch)
-    result = update_branch(base_branch)
-
-    if "Already up to date" not in result.stdout:
-        click.echo("Changes pulled from origin. Rebasing stack.")
-        rebase_onto_target(base_branch)
-        return
-
-    run_command(["git", "checkout", "-"])
 
 
 def rebase_onto_target(target: str, interactive: bool = False) -> None:
@@ -142,47 +83,6 @@ def rebase_onto_target(target: str, interactive: bool = False) -> None:
     run_command(command, check=True)
 
 
-def find_ref_branches_of_commit(refs: dict, commit: str) -> list[str]:
-    return refs.get(commit, [])
-
-
-def find_branches_with_commit(commit: str) -> list[str]:
-    branches = run_command(["git", "branch", "--contains", commit])
-    branches = [
-        branch.replace("*", "").strip()
-        for branch in branches.stdout.split("\n")
-        if branch
-    ]
-    return branches
-
-
-def get_stack(commits: list[str], dev_branch: str) -> list[str]:
-    """
-    Get the commits that are not in base branch
-    Sort the branches by the number of those commits that they contain
-    return the sorted list of branches
-    """
-    stack = defaultdict(int)
-    for commit in commits:
-        result = run_command(["git", "branch", "--contains", commit])
-        branches = result.stdout.split("\n")
-        branches = [branch.replace("*", "").strip() for branch in branches if branch]
-        branches = [branch for branch in branches if branch != dev_branch]
-        if not branches:
-            continue
-        for branch in branches:
-            stack[branch] += 1
-
-    sorted_stack = sorted(stack.items(), key=lambda item: item[1], reverse=True)
-
-    return [branch for branch, _ in sorted_stack]
-
-
-def local_branch_exists(branch_name):
-    result = run_command(["git", "branch", "--list", branch_name])
-    return bool(result.stdout.strip())
-
-
 def create_branch_name(branch_name_template: str, next_pr_id: int):
     # Get the git author name
     author_name = (
@@ -194,20 +94,6 @@ def create_branch_name(branch_name_template: str, next_pr_id: int):
     )
 
     return branch_name
-
-
-def create_branch_from_commit(branch_name, commit_sha):
-    run_command(["git", "branch", branch_name, commit_sha])
-
-
-def checkout_new_branch(branch_name, commit_sha):
-    run_command(["git", "checkout", "-b", branch_name, commit_sha])
-
-
-def set_upstream_to_origin(branch_name):
-    run_command(
-        ["git", "branch", "--set-upstream-to", f"origin/{branch_name}", branch_name]
-    )
 
 
 def get_current_branch() -> str:
