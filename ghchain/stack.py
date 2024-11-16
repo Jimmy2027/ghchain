@@ -14,6 +14,7 @@ from ghchain.git_utils import (
     git_push,
 )
 from ghchain.github_utils import (
+    create_branch_from_issue,
     create_pull_request,
     get_next_gh_id,
     run_tests_on_branch,
@@ -131,21 +132,34 @@ class Stack(BaseModel):
         """
         pr_created = False
         if not commit.branch:
-            branch_id = max([get_next_gh_id(), *[id + 1 for id in self.branch_ids]])
-            branch_name = create_branch_name(
-                ghchain.config.branch_name_template, branch_id
-            )
+            if commit.issue_url:
+                logger.info(f"Creating branch from issue {commit.issue_url}")
+                # set a temporary branch name as it will be created later
+                branch_name = "{will be created from issue}"
+
+            else:
+                branch_id = max([get_next_gh_id(), *[id + 1 for id in self.branch_ids]])
+                branch_name = create_branch_name(
+                    ghchain.config.branch_name_template, branch_id
+                )
             click.confirm(
                 f"Create branch {branch_name} for commit {commit.sha}?\n{commit.message}\n",
                 abort=True,
                 default=True,
             )
             logger.info(f"Creating branch {branch_name} for commit {commit.sha}")
-            ghchain.repo.git.branch(branch_name, commit.sha)
+            if commit.issue_url:
+                # create the branch from the gh issue
+                branch_name = create_branch_from_issue(
+                    issue_id=commit.issue_url, base_commit=commit.sha
+                )
+            else:
+                ghchain.repo.git.branch(branch_name, commit.sha)
             commit.branch = branch_name
 
             # Push the branch to the remote
             git_push(branch_name)
+
         else:
             branch_name = commit.branch
 

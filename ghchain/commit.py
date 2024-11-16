@@ -1,9 +1,11 @@
+import re
 from typing import Optional
 
 import pandas as pd
 from pydantic import BaseModel
 
 import ghchain
+from ghchain.git_utils import get_issue_url
 from ghchain.github_utils import get_pr_url_for_branch
 from ghchain.status import (
     PrStatus,
@@ -63,8 +65,11 @@ def workflow_statuses_to_note(workflow_statuses: list[WorkflowStatus]):
 def get_commit_notes(
     pr_url: str | None = None,
     pr_status: PrStatus | None = None,
+    issue_url: str | None = None,
     workflow_statuses: list[WorkflowStatus] | None = None,
 ):
+    if issue_url:
+        return f"[ghchain]\nissue = {issue_url}\n"
     if not pr_status and not pr_url and not workflow_statuses:
         return ""
 
@@ -100,6 +105,8 @@ class Commit(BaseModel):
     sha: str
     message: str
     branch: str | None = None
+    # if the commit is linked to an issue:
+    issue_url: str | None = None
     pr_url: Optional[str] = None
     notes: Optional[str] = None
     pr_status: Optional[PrStatus] = None
@@ -110,6 +117,15 @@ class Commit(BaseModel):
 
     def __init__(self, **data):
         super().__init__(**data)
+
+        # check if the commit meesage contains the github issue id in the following format: [#1234]
+        # if it does, set the issue_id to 1234
+        pattern = re.compile(r"\[#(\d+)\]")
+        match = pattern.search(self.message)
+
+        if match:
+            issue_id = int(match.group(1))
+            self.issue_url = get_issue_url(issue_id)
 
         self.workflow_statuses = []
         for workflow in ghchain.config.workflows:
@@ -129,6 +145,7 @@ class Commit(BaseModel):
         self.notes = get_commit_notes(
             pr_url=self.pr_url,
             pr_status=self.pr_status,
+            issue_url=self.issue_url,
             workflow_statuses=self.workflow_statuses,
         )
 

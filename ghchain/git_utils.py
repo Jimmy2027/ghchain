@@ -142,3 +142,19 @@ def get_commit_message_to_branch_mapping() -> dict[str, str]:
         branch.commit.message.replace("\n", ""): branch.name
         for branch in ghchain.repo.branches
     }
+
+
+def get_issue_url(issue_id: int) -> str:
+    """
+    Get the GitHub issue URL using the issue ID and the remote repository URL.
+    """
+    remote_url = ghchain.repo.remotes.origin.url
+
+    # Extract the owner and repo name from the remote URL
+    splits = remote_url.split("/")
+    owner, repo_name = splits[-2], splits[-1].replace(".git", "")
+
+    # Construct the issue URL
+    issue_url = f"https://github.com/{owner}/{repo_name}/issues/{issue_id}"
+
+    return issue_url

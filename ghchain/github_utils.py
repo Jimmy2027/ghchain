@@ -266,3 +266,38 @@ def get_pr_isdraft(pr_id) -> bool:
         ["gh", "pr", "view", pr_id, "--json", "isDraft"],
     )
     return json.loads(result.stdout)["isDraft"]
+
+
+def create_branch_from_issue(issue_id: int, base_commit: str) -> str:
+    """
+    Create a branch from a GitHub issue and return the branch name.
+    """
+    # Run the command to create the branch
+    result = run_command(["gh", "issue", "develop", str(issue_id)])
+
+    # Check if the command executed successfully
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"Failed to create branch from issue {issue_id}: {result.stderr}"
+        )
+
+    # Extract the branch name from the output
+    pattern = r"github.com/.*/tree/([^\s]+)"
+    match = re.search(pattern, result.stdout)
+
+    if match:
+        branch_name = match.group(1)
+        # fetch the origin
+        ghchain.repo.remotes.origin.fetch()
+        # Create a new branch pointing to the base commit
+        branch = ghchain.repo.create_head(branch_name, base_commit)
+
+        # Set the branch to track the remote branch
+        branch.set_tracking_branch(ghchain.repo.remotes.origin.refs[branch_name])
+
+        # Push the updated branch to the remote
+        ghchain.repo.git.push("origin", f"{branch_name}:{branch_name}", force=True)
+
+        return branch_name
+    else:
+        raise ValueError("Branch name not found in the command output.")

@@ -1,8 +1,8 @@
 import json
 import os
 import subprocess
-from pathlib import Path
 import time
+from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
@@ -337,5 +337,69 @@ def test_run_tests(cli_runner, repo_cleanup, with_prs):
     assert result.exit_code == 0
 
 
+@pytest.mark.order(1)
+def test_linked_issue(cli_runner, repo_cleanup):
+    """
+    Test that commits with a linked issue in the message are correctly detected
+    and the branch is linked to the corresponding GitHub issue.
+    """
+    cli_runner, _ = cli_runner
+
+    # Step 1: Create a new GitHub issue
+    issue_title = "Test issue for linking"
+    issue_body = "This issue is created for testing branch linking in ghchain."
+    issue_creation_result = run_command(
+        [
+            "gh",
+            "issue",
+            "create",
+            "--title",
+            issue_title,
+            "--body",
+            issue_body,
+        ],
+    )
+    assert (
+        issue_creation_result.returncode == 0
+    ), f"Issue creation failed: {issue_creation_result.stderr}"
+
+    # Extract the issue number from the output
+    issue_url = issue_creation_result.stdout.strip()
+    issue_id = int(issue_url.split("/")[-1])
+
+    # Step 2: Create a commit with a linked issue reference
+    run_command(["git", "checkout", "mydev"])
+    with open("README.md", "a") as f:
+        f.write("This commit is linked to an issue.\n")
+    run_command(["git", "add", "README.md"])
+    commit_message = f"Add feature linked to issue [#{issue_id}]"
+    run_command(["git", "commit", "-m", commit_message])
+
+    # Step 3: Run ghchain to process the commit
+    result = cli_runner.invoke(cli.ghchain_cli)
+    assert (
+        result.exit_code == 0
+    ), f"Command failed with exit code {result.exit_code}\n{result.output}"
+
+    # Step 4: Check that the commit was processed correctly
+    stack = Stack.create()
+    assert len(stack.commits) == 1, "Expected 1 commit in the stack"
+
+    commit = stack.commits[0]
+    assert (
+        commit.issue_url == issue_url
+    ), f"Expected issue_id {issue_url}, got {commit.issue_url}"
+    assert commit.branch is not None, "Expected branch to be created for the commit"
+
+    # Step 5: Verify that the branch is linked to the GitHub issue
+    issue_branches = run_command(
+        ["gh", "issue", "develop", "--list", str(issue_id)]
+    ).stdout
+    assert issue_branches.split("\t")[0] == commit.branch, (
+        f"Expected branch {commit.branch} to be linked to issue {issue_id}, "
+        f"got {issue_branches}"
+    )
+
+
 if __name__ == "__main__":
-    pytest.main(["-v", __file__, "-s", "-x", "-k test_run_tests"])
+    pytest.main(["-v", __file__, "-s", "-x", "-k test_linked_issue"])
