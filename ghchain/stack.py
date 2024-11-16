@@ -176,6 +176,58 @@ class Stack(BaseModel):
 
         return pr_created
 
+    def publish(self):
+        """
+        Collect all branches in the stack that need to be pushed to the remote,
+        ask the user for confirmation, and then push them all with force-with-lease.
+        """
+        branches_to_push = []
+
+        # Collect branches that need to be pushed
+        for commit in self.commits:
+            if not commit.branch:
+                logger.trace(
+                    f"Commit {commit.sha} does not have an associated branch. Skipping."
+                )
+                continue
+
+            branch_name = commit.branch
+            remote_branch = f"origin/{branch_name}"
+
+            try:
+                local_sha = ghchain.repo.git.rev_parse(branch_name)
+                remote_sha = ghchain.repo.git.rev_parse(remote_branch)
+
+                if local_sha != remote_sha:
+                    branches_to_push.append(branch_name)
+            except Exception:
+                # Remote branch does not exist
+                branches_to_push.append(branch_name)
+
+        if not branches_to_push:
+            logger.info("All branches are up-to-date with the remote. Nothing to push.")
+            return
+
+        # Confirm with the user
+        click.confirm(
+            f"The following branches will be pushed with --force-with-lease:\n{', '.join(branches_to_push)}\n"
+            "Do you want to proceed?",
+            abort=True,
+        )
+
+        # Push all branches with --force-with-lease
+        try:
+            ghchain.repo.git.push("--force-with-lease", "origin", *branches_to_push)
+            logger.info(
+                f"Successfully pushed branches: {', '.join(branches_to_push)} with --force-with-lease."
+            )
+        except Exception as push_error:
+            logger.error(
+                f"Failed to push branches: {', '.join(branches_to_push)}: {push_error}"
+            )
+
+        logger.info("Publishing complete.")
+
 
 def find_branch_of_rebased_commit(commit: Commit) -> str:
     """

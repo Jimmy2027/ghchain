@@ -157,8 +157,9 @@ def fix_refs():
     this function might help.
     """
     import subprocess
-    from ghchain.stack import Stack
+
     from ghchain.git_utils import get_commit_message_to_branch_mapping, run_command
+    from ghchain.stack import Stack
 
     stack = Stack.create()
 
@@ -190,6 +191,17 @@ def fix_refs():
                     )
 
     click.echo("Finished attempting to fix refs.")
+
+
+@ghchain_cli.command()
+def publish():
+    """
+    Publish all updated branches in the stack to the remote.
+    """
+    from ghchain.stack import Stack
+
+    stack = Stack.create()
+    stack.publish()
 
 
 if __name__ == "__main__":
