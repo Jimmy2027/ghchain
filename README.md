@@ -9,11 +9,11 @@ This tool is heavily inspired by [ghstack](https://github.com/ezyang/ghstack) an
 -   **Pull Request Management**: Automatically creates a GitHub pull request for each branch, stacking them sequentially for streamlined review.
 -   **Configurable Workflows**: Supports custom GitHub Actions workflows via `.ghchain.toml` for automated testing and checks.
 -   **Dynamic Branch Naming**: Configurable branch naming schemes to match your project's conventions.
--  **Logging**: Detailed logging to track the process of ghchain.
-- **git notes**: ghchain adds a [git note](https://git-scm.com/docs/git-notes) to each commit with
-  - the PR number, to easily track the PRs.
-  - workflow status, to see if the workflows have passed.
-  - status checks, to see if the status checks have passed.
+-   **Logging**: Detailed logging to track the process of ghchain.
+-   **git notes**: ghchain adds a [git note](https://git-scm.com/docs/git-notes) to each commit with
+    -   the PR number, to easily track the PRs.
+    -   workflow status, to see if the workflows have passed.
+    -   status checks, to see if the status checks have passed.
 
 > [!CAUTION]
 > Running `ghchain` with multiple branches containing the same commit may lead to conflicts or errors.
@@ -46,19 +46,19 @@ Usage: ghchain [OPTIONS] COMMAND [ARGS]...
   Usage:
 
   ghchain: will create a branch for each commit in the stack that doesn't
-  already have one    and push it to the remote.
+  already have one and push it to the remote.
 
   ghchain --create-pr: will create a branch for each commit in the stack that
-  doesn't already have one,   push it to the remote and create a PR for each
+  doesn't already have one, push it to the remote and create a PR for each
   branch.
 
   ghchain --draft: will create a branch for each commit in the stack that
-  doesn't already have one,   push it to the remote and create a draft PR for
+  doesn't already have one, push it to the remote and create a draft PR for
   each branch.
 
   ghchain --with-tests: will create a branch for each commit in the stack that
-  doesn't already have one,   push it to the remote and run the github
-  workflows that are specified in the    .ghchain.toml config of the
+  doesn't already have one, push it to the remote and run the github
+  workflows that are specified in the .ghchain.toml config of the
   repository.
 
 Options:
@@ -73,11 +73,11 @@ Options:
 Commands:
   fix-refs       If you messed up your stack with a rebase and lost the...
   land           Merge the specified branch into the configured base branch.
+  publish        Publish all updated branches in the stack to the remote.
   rebase         Rebase the current branch onto branch, using...
   refresh        Merge the specified branch into the configured base branch.
   run-workflows  Run the github workflows that are specified in the...
 ```
-
 
 ## Usage Example
 
@@ -96,7 +96,7 @@ git log main..mydev
 >> Author: Hendrik Klug
 >> Date:   Sat Apr 13 14:27:25 2042 +0200
 >>
->>     commit 2
+>>     [#2558] commit 2
 >>
 >> commit b64c30667ad23847e981e4c9bafe8eee3ffb0881
 >> Author: Hendrik Klug
@@ -111,6 +111,9 @@ git log main..mydev
 >>     commit 0
 
 ```
+
+> [!NOTE]
+> "commit 2" references issue #2558 in the commit message. Ghchain will use this information to link the branch or PR to the issue.
 
 You would like to make the life of the reviewer easier by creating a pull request for each commit.
 Running `ghchain -p` will create a new branch for each commit and create a pull request for each of those branches:
@@ -128,7 +131,11 @@ commit 80edccef17a7086b7a90b03bf18a5c763adf741f (origin/hk-135, hk-135)
 Author: Hendrik Klug
 Date:   Sat Apr 13 14:27:25 2042 +0200
 
-    commit 2
+    [#2558] commit 2
+
+Notes:
+    [ghchain]
+    issue = https://github.com/HendrikKlug-synthara/mytest/issues/2558
 
 commit b64c30667ad23847e981e4c9bafe8eee3ffb0881 (origin/hk-134, hk-134)
 Author: Hendrik Klug
@@ -143,6 +150,10 @@ Date:   Sat Apr 13 14:27:25 2042 +0200
     commit 0
 
 ```
+
+> [!NOTE]
+> The pull request that was created for `commit 2` will automatically have a reference to issue #2558.
+> The commit also has a [git note](https://git-scm.com/docs/git-notes) with the issue link.
 
 > [!NOTE]
 > The `with-tests` flag can also be passed to `ghchain process-commits`. If it is passed all workflows defined in the `.ghchain.toml` file will be run for each commit.
@@ -165,11 +176,12 @@ This will run a `git rebase --update-refs hk-134` and push the changes to the re
 > [!NOTE]
 > You can also pass the --interactive flag to the rebase command to run an interactive rebase.
 
-
 ### Checking the status of the PRs/Commits
+
 You can run `ghchain refresh` to update the [git notes](https://git-scm.com/docs/git-notes) of your commits.
 This will update the workflow status and the status checks of each commit.
 `git log` will then show the following:
+
 ```shell
 
 commit 51d6204578eacb3ee78fd1488e367e37bb20b492 (origin/hk-133, hk-133)
@@ -196,9 +208,9 @@ Notes:
 ```
 
 ## Installation
+
 ghchain uses the github cli [gh](https://cli.github.com/) to interact with the github api.
 It needs to be installed and configured before `ghchain` can be used.
-
 
 ### pip release version
 
