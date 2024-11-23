@@ -108,7 +108,7 @@ def create_stack():
         with open("README.md", "a") as f:
             f.write(f"line {i}\n")
         run_command(["git", "add", "README.md"])
-        run_command(["git", "commit", "-m", f"commit {i}"])
+        run_command(["git", "commit", "-m", f"commit {i}\nThis is a test commit."])
 
 
 @pytest.mark.order(1)

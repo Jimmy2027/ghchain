@@ -1,4 +1,3 @@
-import re
 from typing import List, Optional
 
 import click
@@ -40,62 +39,52 @@ class Stack(BaseModel):
 
         logger.debug(f"Creating stack with dev branch: {dev_branch}")
 
-        log_output = ghchain.repo.git.log(
-            f"{base_branch}..", "--decorate", "--pretty=oneline"
-        ).splitlines()
-
-        # Regular expression to match the git log output
-        log_pattern = re.compile(
-            r"(?P<sha>[a-f0-9]{40}) \((?P<branches>[^)]+)\) (?P<message>.+)"
-        )
+        # Fetch the commits that are in dev_branch but not in base_branch
+        commits_diff = ghchain.repo.iter_commits(f"{base_branch}..{dev_branch}")
 
         commits = []
         # Reverse log output to start from the bottom of the stack
-        for line in log_output[::-1]:
-            match = log_pattern.match(line)
-            if match:
-                sha = match.group("sha")
-                branches = (
-                    match.group("branches")
-                    .replace("HEAD -> ", "")
-                    .replace("origin/", "")
-                    .split(", ")
+        for commit in reversed(list(commits_diff)):
+            sha = commit.hexsha
+            message = commit.message.strip()
+            is_fixup = message.startswith("fixup!")
+
+            # Find branches that point to this commit (branches where this commit is the HEAD)
+            pointing_branches = [
+                ref.name.split("/")[-1]
+                for ref in ghchain.repo.branches
+                if ref.commit == commit
+            ]
+            pointing_branches = set(pointing_branches) - {
+                dev_branch
+            }  # Exclude the dev branch
+
+            if len(pointing_branches) > 1:
+                error_message = f"Commit {sha} has multiple branches: {pointing_branches}. This is not supported."
+                logger.error(error_message)
+                raise ValueError(error_message)
+
+            branch = pointing_branches.pop() if pointing_branches else None
+            commit_obj = Commit(
+                sha=sha,
+                branch=branch,
+                message=message,
+                is_fixup=is_fixup,
+            )
+            commits.append(commit_obj)
+
+            if is_fixup:
+                # Find the previous commit that is not a fixup and assign it the same branch
+                target_commit = next(
+                    (
+                        commit
+                        for commit in commits[::-1]
+                        if not commit.is_fixup and not commit.branch
+                    ),
+                    None,
                 )
-                message = match.group("message")
-
-                # Remove the dev branch from the list of branches
-                branches = set(branches) - {dev_branch}
-                if len(branches) > 1:
-                    error_message = f"Commit {sha} has multiple branches: {branches}. This is not supported."
-                    logger.error(error_message)
-                    raise ValueError(error_message)
-
-                branch = branches.pop() if branches else None
-                commit = Commit(
-                    sha=sha,
-                    branch=branch,
-                    message=message,
-                )
-                commits.append(commit)
-                if commit.is_fixup:
-                    # Find the previous commit that is not a fixup and mark it with the same branch
-                    target_commit = next(
-                        (
-                            commit
-                            for commit in commits[::-1]
-                            if not commit.is_fixup and not commit.branch
-                        ),
-                        None,
-                    )
-                    if target_commit:
-                        target_commit.branch = commits[-1].branch
-
-            else:
-                # If the line doesn't match the pattern, it might be a commit without branches
-                parts = line.split(" ", 1)
-                sha = parts[0]
-                message = parts[1]
-                commits.append(Commit(sha=sha, branch=None, message=message))
+                if target_commit:
+                    target_commit.branch = commit_obj.branch
 
         return cls(commits=commits, dev_branch=dev_branch, base_branch=base_branch)
 
