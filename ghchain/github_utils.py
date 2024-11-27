@@ -1,5 +1,6 @@
 import json
 import re
+import shutil
 from typing import Optional
 
 import click
@@ -11,6 +12,13 @@ STACK_LIST_START_MARKER = "<!-- STACK_LIST_START -->"
 STACK_LIST_END_MARKER = "<!-- STACK_LIST_END -->"
 WORKFLOW_BADGES_START_MARKER = "<!-- WORKFLOW_BADGES_START -->"
 WORKFLOW_BADGES_END_MARKER = "<!-- WORKFLOW_BADGES_END -->"
+
+
+# Verify that gh is installed
+if shutil.which("gh") is None:
+    raise Exception(
+        "gh is not installed. Please install it from https://cli.github.com/"
+    )
 
 
 def run_workflows(workflow_ids: list[str], branch: str) -> list[str]:
