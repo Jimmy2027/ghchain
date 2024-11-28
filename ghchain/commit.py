@@ -118,14 +118,7 @@ class Commit(BaseModel):
     def __init__(self, **data):
         super().__init__(**data)
 
-        # check if the commit meesage contains the github issue id in the following format: [#1234]
-        # if it does, set the issue_id to 1234
-        pattern = re.compile(r"\[#(\d+)\]")
-        match = pattern.search(self.message)
-
-        if match:
-            issue_id = int(match.group(1))
-            self.issue_url = get_issue_url(issue_id)
+        self.issue_url = self.extract_issue_url()
 
         self.workflow_statuses = []
         for workflow in ghchain.config.workflows:
@@ -150,6 +143,27 @@ class Commit(BaseModel):
         )
 
         self.update_notes()
+
+    def extract_issue_id(self) -> Optional[int]:
+        """
+        Extract the issue ID from the commit message if it contains the GitHub issue id
+        in the format: [issue tags] commit header (#issue id)
+        """
+        pattern = re.compile(r"\(#(\d+)\)")
+        match = pattern.search(self.message)
+
+        if match:
+            return int(match.group(1))
+        return None
+
+    def extract_issue_url(self) -> Optional[str]:
+        """
+        Extract the issue URL from the commit message.
+        """
+        issue_id = self.extract_issue_id()
+        if issue_id:
+            return get_issue_url(issue_id)
+        return None
 
     def update_notes(self):
         # Write the updated notes back to the git notes
