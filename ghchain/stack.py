@@ -140,7 +140,8 @@ class Stack(BaseModel):
             if commit.issue_url:
                 # create the branch from the gh issue
                 branch_name = create_branch_from_issue(
-                    issue_id=commit.issue_url, base_commit=commit.sha
+                    issue_id=int(commit.issue_url.split("/")[-1]),
+                    base_commit=commit.sha,
                 )
             else:
                 ghchain.repo.git.branch(branch_name, commit.sha)
