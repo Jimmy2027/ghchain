@@ -152,7 +152,7 @@ def get_issue_url(issue_id: int) -> str:
 
     # Extract the owner and repo name from the remote URL
     splits = remote_url.split("/")
-    owner, repo_name = splits[-2], splits[-1].replace(".git", "")
+    owner, repo_name = splits[-2].split(":")[-1], splits[-1].replace(".git", "")
 
     # Construct the issue URL
     issue_url = f"https://github.com/{owner}/{repo_name}/issues/{issue_id}"
