@@ -58,16 +58,9 @@ def ghchain_cli(ctx, create_pr, draft, with_tests):
 
 
 @ghchain_cli.command()
-@click.option(
-    "--branch",
-    "-b",
-    type=str,
-    default=None,
-    help=("The target branch to which the configured base branch will be updated."),
-)
-def refresh(branch):
+def refresh():
     """
-    Merge the specified branch into the configured base branch.
+    Update the commit notes with the PR/ workflow statuses for the commits in the stack.
     """
     from ghchain.stack import Stack
 
