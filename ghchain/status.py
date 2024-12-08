@@ -176,6 +176,29 @@ class PrStatus:
     status_checks: Optional[dict[str, StatusCheck]] = None
 
     @classmethod
+    def from_gh_cli_dict(cls, gh_cli_dict: dict):
+        return cls(
+            branchname=gh_cli_dict["headRefName"],
+            pr_id=int(gh_cli_dict["number"]),
+            review_decision=ReviewDecision(gh_cli_dict["reviewDecision"]),
+            is_draft=gh_cli_dict["isDraft"],
+            is_mergeable=MergeableStatus(gh_cli_dict["mergeable"]),
+            status_checks={
+                status["name"]: StatusCheck(
+                    **{
+                        k: V
+                        for k, V in status.items()
+                        if k in StatusCheck.__annotations__
+                    }
+                )
+                for status in gh_cli_dict["statusCheckRollup"]
+            }
+            if gh_cli_dict["statusCheckRollup"]
+            else None,
+            title=gh_cli_dict["title"],
+        )
+
+    @classmethod
     def from_branchname(cls, branchname: str):
         pr_id = get_pr_id_for_branch(branchname)
         if not pr_id:
