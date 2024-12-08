@@ -14,8 +14,11 @@ from ghchain.git_utils import (
 )
 from ghchain.github_utils import (
     create_branch_from_issue,
-    create_pull_request,
     get_next_gh_id,
+)
+from ghchain.pull_request import (
+    PR,
+    get_open_prs,
     run_tests_on_branch,
     update_pr_descriptions,
 )
@@ -33,6 +36,11 @@ class Stack(BaseModel):
         Create a Stack object with commits from the current branch which are not in the base branch.
         Whatever branch is currently checked out will be considered the dev branch.
         """
+
+        sha_to_pull_request_mapping: dict[str, PR] = {
+            pr.commits[-1]: pr for pr in get_open_prs()
+        }
+
         if not base_branch:
             base_branch = ghchain.config.base_branch
         dev_branch = get_current_branch()
@@ -70,6 +78,7 @@ class Stack(BaseModel):
                 branch=branch,
                 message=message,
                 is_fixup=is_fixup,
+                pull_request=sha_to_pull_request_mapping.get(sha),
             )
             commits.append(commit_obj)
 
@@ -154,8 +163,8 @@ class Stack(BaseModel):
             branch_name = commit.branch
 
         # If the commit is not a fixup and it does not have a PR, create one
-        if not commit.is_fixup and create_pr and not commit.pr_id:
-            commit.pr_url = create_pull_request(
+        if not commit.is_fixup and create_pr and not commit.pull_request:
+            commit.pull_request = PR.create_pull_request(
                 base_branch=ghchain.config.base_branch.replace("origin/", "")
                 if not self.commit2idx[commit.sha]
                 else self.commits[self.commit2idx[commit.sha] - 1].branch,
@@ -163,20 +172,21 @@ class Stack(BaseModel):
                 title=commit.message.split("\n")[0],
                 body=commit.message,
                 draft=draft,
+                commit_sha=commit.sha,
             )
             pr_created = True
 
         if create_pr:
             update_pr_descriptions(
                 pr_stack=[
-                    c.pr_url
+                    c.pull_request
                     for c in self.commits[: self.commit2idx[commit.sha] + 1]
-                    if c.pr_url
+                    if c.pull_request
                 ]
             )
 
         if with_tests:
-            run_tests_on_branch(branch_name, commit.pr_url)
+            run_tests_on_branch(branch_name, commit.pull_request)
 
         return pr_created
 

@@ -372,7 +372,7 @@ def test_linked_issue(cli_runner, repo_cleanup):
     with open("README.md", "a") as f:
         f.write("This commit is linked to an issue.\n")
     run_command(["git", "add", "README.md"])
-    commit_message = f"Add feature linked to issue [#{issue_id}]"
+    commit_message = f"Add feature linked to issue (#{issue_id})"
     run_command(["git", "commit", "-m", commit_message])
 
     # Step 3: Run ghchain to process the commit
@@ -402,4 +402,4 @@ def test_linked_issue(cli_runner, repo_cleanup):
 
 
 if __name__ == "__main__":
-    pytest.main(["-v", __file__, "-s", "-x", "-k test_linked_issue"])
+    pytest.main(["-v", __file__, "-s", "-x", "-k test_process_commits[True-True-True]"])
