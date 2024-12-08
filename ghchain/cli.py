@@ -125,9 +125,9 @@ def run_workflows(branch):
     from ghchain.git_utils import get_current_branch
     from ghchain.github_utils import (
         get_branch_name_for_pr_id,
-        get_pr_url_for_branch,
-        run_tests_on_branch,
     )
+    from ghchain.pull_request import run_tests_on_branch
+    from ghchain.stack import Stack
 
     branch_name = (
         get_branch_name_for_pr_id(int(branch))
@@ -136,9 +136,15 @@ def run_workflows(branch):
         if branch == "." or not branch
         else branch
     )
-    pr_url = get_pr_url_for_branch(branch_name)
 
-    run_tests_on_branch(branch=branch_name, pr_url=pr_url)
+    stack = Stack.create()
+
+    run_tests_on_branch(
+        branch=branch_name,
+        pull_request=next(
+            commit for commit in stack.commits if commit.branch == branch_name
+        ).pull_request,
+    )
 
 
 @ghchain_cli.command()
