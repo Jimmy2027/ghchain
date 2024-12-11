@@ -58,6 +58,41 @@ def ghchain_cli(ctx, create_pr, draft, with_tests):
 
 
 @ghchain_cli.command()
+@click.argument("commit_sha", type=str)
+@click.option(
+    "-p",
+    "--create-pr",
+    is_flag=True,
+    help="If set to True, a pull request will be opened for the commit.",
+)
+@click.option(
+    "--draft",
+    is_flag=True,
+    help="Create the pull request as a draft. This flag sets --create-pr to True.",
+)
+@click.option(
+    "--with-tests",
+    is_flag=True,
+    help="Run the github workflows that are specified in the .ghchain.toml config of the repository.",
+)
+def process_commit(commit_sha, create_pr, draft, with_tests):
+    """
+    Process a single commit by its SHA.
+    """
+    from ghchain.stack import Stack
+
+    stack = Stack.create()
+    commit = next((c for c in stack.commits if c.sha == commit_sha), None)
+    if draft:
+        # when draft is passed, we know that the user wants to publish the PRs
+        create_pr = True
+    if commit:
+        stack.process_commit(commit, create_pr, draft, with_tests)
+    else:
+        click.echo(f"Commit with SHA {commit_sha} not found.")
+
+
+@ghchain_cli.command()
 def refresh():
     """
     Update the commit notes with the PR/ workflow statuses for the commits in the stack.
