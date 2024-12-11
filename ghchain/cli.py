@@ -157,6 +157,7 @@ def run_workflows(branch):
     Run the github workflows that are specified in the .ghchain.toml config of the repository for the specified branch.
     If '.' or nothing is passed, the current branch will be used.
     """
+    import ghchain
     from ghchain.git_utils import get_current_branch
     from ghchain.github_utils import (
         get_branch_name_for_pr_id,
@@ -172,14 +173,27 @@ def run_workflows(branch):
         else branch
     )
 
+    if not branch_name:
+        ghchain.logger.error(f"Branch {branch} not found.")
+        return
+
     stack = Stack.create()
 
-    run_tests_on_branch(
-        branch=branch_name,
-        pull_request=next(
-            commit for commit in stack.commits if commit.branch == branch_name
-        ).pull_request,
+    commit = next(
+        (commit for commit in stack.commits if commit.branch == branch_name), None
     )
+
+    pull_request = None
+    if not commit:
+        ghchain.logger.warning(f"Branch {branch_name} not found in the stack.")
+    elif not commit.pull_request:
+        ghchain.logger.warning(
+            f"Branch {branch_name} does not have a pull request associated with it."
+        )
+    else:
+        pull_request = commit.pull_request
+
+    run_tests_on_branch(branch=branch_name, pull_request=pull_request)
 
 
 @ghchain_cli.command()
