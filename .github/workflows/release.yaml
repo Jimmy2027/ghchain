@@ -93,6 +93,14 @@ jobs:
         with:
           python-version-file: "pyproject.toml"
 
+      - name: Bump version
+        run: |
+            NEW_VERSION="${{ needs.details.outputs.new_version }}"
+            sed -i "s/version = \"[0-9]*\.[0-9]*\.[0-9]*\"/version = \"$NEW_VERSION\"/" $GITHUB_WORKSPACE/pyproject.toml
+
+      - name: Install dependencies
+        run: uv sync
+
       - name: Build source and wheel distribution
         run: |
           uv build
@@ -121,5 +129,56 @@ jobs:
           name: dist
           path: dist/
 
-      - name: Publish distribution to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Publish to PyPI
+        run: |
+          uv publish
+
+  github_release:
+    name: Create GitHub Release
+    needs: [setup_and_build, details]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0 # Fetch full history to avoid issues with tags and branches
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: dist
+          path: dist/
+
+      - name: Create GitHub Release
+        id: create_release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create ${{ needs.details.outputs.tag_name }} dist/* --title ${{ needs.details.outputs.tag_name }} --generate-notes
+
+  bump_version:
+    needs: [details, github_release, pypi_publish]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0 # Fetch full history to avoid issues with tags and branches
+
+      - name: Bump version
+        run: |
+          NEW_VERSION="${{ needs.details.outputs.new_version }}"
+          sed -i "s/version = \"[0-9]*\.[0-9]*\.[0-9]*\"/version = \"$NEW_VERSION\"/" $GITHUB_WORKSPACE/pyproject.toml
+
+      - uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: Bumping version to ${{ needs.details.outputs.new_version }}
+          branch: bump-version-${{ needs.details.outputs.new_version }}
+          file_pattern: "pyproject.toml"
+          skip_dirty_check: true
+          create_branch: true
