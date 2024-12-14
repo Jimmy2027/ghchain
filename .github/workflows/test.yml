@@ -21,7 +21,7 @@ concurrency:
     cancel-in-progress: true
 
 jobs:
-    build:
+    test:
         runs-on: ubuntu-latest
 
         steps:
@@ -30,23 +30,18 @@ jobs:
               with:
                   python-version: "3.11"
 
-            - name: Install ghchain
+            - name: Install uv
+              uses: astral-sh/setup-uv@v3
+
+            - name: Run tests
               run: |
-                  pip install .[test]
-                  pip install pytest pytest-order
+                  uv sync --dev
 
             - name: Configure Git
               run: |
                   git config --global user.name "github-actions[bot]"
                   git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
-            - name: Make Changes
-              run: |
-                  cd ..
-                  git clone https://github.com/HendrikKlug-synthara/mytest.git
-
             - name: Run Pytests
               run: |
-                  cp ../mytest/.ghchain.toml ghchain/
-                  cp ../mytest/.ghchain.toml .
-                  pytest tests/tests.py -s -vvv
+                  uv run pytest tests/tests.py -s -vvv
