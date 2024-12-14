@@ -16,6 +16,9 @@ class Config(BaseModel):
     branch_name_template: str = Field(default="{git_config_author}-{pr_id}")
     delete_branch_after_merge: bool = Field(default=True)
 
+    # regex pattern to detect linked issues in commit messages
+    issue_pattern: str = Field(default=r"\(#(\d+)\)")
+
     # logging
     log_file: Path | None = Field(default=None)
     log_level: str = Field(default="INFO")

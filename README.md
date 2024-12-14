@@ -9,6 +9,7 @@ This tool is heavily inspired by [ghstack](https://github.com/ezyang/ghstack) an
 -   **Pull Request Management**: Automatically creates a GitHub pull request for each branch, stacking them sequentially for streamlined review.
 -   **Configurable Workflows**: Supports custom GitHub Actions workflows via `.ghchain.toml` for automated testing and checks.
 -   **Dynamic Branch Naming**: Configurable branch naming schemes to match your project's conventions.
+-   **Issue Link Detection**: Customizable regex patterns to detect linked issues in commit messages.
 -   **Logging**: Detailed logging to track the process of ghchain.
 -   **git notes**: ghchain adds a [git note](https://git-scm.com/docs/git-notes) to each commit with
     -   the PR number, to easily track the PRs.
@@ -30,7 +31,9 @@ branch_name_template = "{git_config_author}-{pr_id}"  # Template for naming bran
 delete_branch_after_merge = true  # Whether to delete the branch after the PR is merged
 log_file = "path/to/ghchain.log"  # Path to the log file
 log_level = "INFO"  # Logging level
-
+# Regex pattern to detect linked issues in commit messages.
+# This one is for the default pattern of "(#<issue_number>)"
+issue_pattern = "\\\\(#(\\\\d+)\\\\)"
 ```
 
 # Usage
@@ -96,7 +99,7 @@ git log main..mydev
 >> Author: Hendrik Klug
 >> Date:   Sat Apr 13 14:27:25 2042 +0200
 >>
->>     [#2558] commit 2
+>>     [feat] commit 2 (#2558)
 >>
 >> commit b64c30667ad23847e981e4c9bafe8eee3ffb0881
 >> Author: Hendrik Klug
@@ -131,7 +134,7 @@ commit 80edccef17a7086b7a90b03bf18a5c763adf741f (origin/hk-135, hk-135)
 Author: Hendrik Klug
 Date:   Sat Apr 13 14:27:25 2042 +0200
 
-    [#2558] commit 2
+    [feat] commit 2 (#2558)
 
 Notes:
     [ghchain]
@@ -154,6 +157,7 @@ Date:   Sat Apr 13 14:27:25 2042 +0200
 > [!NOTE]
 > The pull request that was created for `commit 2` will automatically have a reference to issue #2558.
 > The commit also has a [git note](https://git-scm.com/docs/git-notes) with the issue link.
+> You can configure the issue pattern with which linked issues are detected in the `.ghchain.toml` file.
 
 > [!NOTE]
 > The `with-tests` flag can also be passed to `ghchain process-commits`. If it is passed all workflows defined in the `.ghchain.toml` file will be run for each commit.

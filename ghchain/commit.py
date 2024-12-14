@@ -117,6 +117,7 @@ class Commit(BaseModel):
     def __init__(self, **data):
         super().__init__(**data)
 
+        # extract the linked issue id from the commit message
         self.issue_url = self.extract_issue_url()
 
         self.workflow_statuses = []
@@ -142,7 +143,7 @@ class Commit(BaseModel):
         Extract the issue ID from the commit message if it contains the GitHub issue id
         in the format: [issue tags] commit header (#issue id)
         """
-        pattern = re.compile(r"\(#(\d+)\)")
+        pattern = re.compile(ghchain.config.issue_pattern)
         match = pattern.search(self.message)
 
         if match:
