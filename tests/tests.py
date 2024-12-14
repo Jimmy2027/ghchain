@@ -47,7 +47,18 @@ def patch_git_repo(monkeypatch, setup_mytest_repo):
 
 @pytest.fixture
 def patch_config(monkeypatch, setup_mytest_repo):
-    config = Config.from_toml(Path(setup_mytest_repo) / ".ghchain.toml")
+    """
+    Overwrite the .ghchain with a custom configuration for testing.
+    """
+    mytest_config = """\
+ workflows = ["workflow_1", "workflow_2"]
+ branch_name_template = "hk-{pr_id}"
+ log_level = "TRACE"
+ issue_pattern = "\\\\(#(\\\\d+)\\\\)"
+ """
+    ghchain_config = Path(setup_mytest_repo) / ".ghchain.toml"
+    ghchain_config.write_text(mytest_config)
+    config = Config.from_toml(ghchain_config)
     monkeypatch.setattr("ghchain.config", config)
 
 
@@ -402,4 +413,4 @@ def test_linked_issue(cli_runner, repo_cleanup):
 
 
 if __name__ == "__main__":
-    pytest.main(["-v", __file__, "-s", "-x", "-k test_process_commits[True-True-True]"])
+    pytest.main(["-v", __file__, "-s", "-x", "-k linked_issue"])
