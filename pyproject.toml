@@ -34,11 +34,11 @@ requires-python = ">=3.9"
 [tool.setuptools]
 packages = { find = { include = ["ghchain", "ghchain.*"] } }
 
+[dependency-groups]
+dev = ["pytest>=8.3.3"]
+
 [project.urls]
 Homepage = "https://github.com/Jimmy2027/ghchain"
 
 [project.scripts]
 ghchain = "ghchain.cli:ghchain_cli"
-
-[project.optional-dependencies]
-test = ["pytest>=3"]
