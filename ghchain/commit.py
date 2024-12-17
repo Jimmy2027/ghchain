@@ -6,7 +6,7 @@ from pydantic import BaseModel
 
 import ghchain
 from ghchain.git_utils import get_issue_url
-from ghchain.github_utils import get_pr_url_for_branch
+from ghchain.pull_request import PR
 from ghchain.status import (
     PrStatus,
     StatusCheck,
@@ -107,9 +107,8 @@ class Commit(BaseModel):
     branch: str | None = None
     # if the commit is linked to an issue:
     issue_url: str | None = None
-    pr_url: Optional[str] = None
+    pull_request: PR | None = None
     notes: Optional[str] = None
-    pr_status: Optional[PrStatus] = None
     workflow_statuses: Optional[list[WorkflowStatus]] = None
 
     class Config:
@@ -118,14 +117,8 @@ class Commit(BaseModel):
     def __init__(self, **data):
         super().__init__(**data)
 
-        # check if the commit meesage contains the github issue id in the following format: [#1234]
-        # if it does, set the issue_id to 1234
-        pattern = re.compile(r"\[#(\d+)\]")
-        match = pattern.search(self.message)
-
-        if match:
-            issue_id = int(match.group(1))
-            self.issue_url = get_issue_url(issue_id)
+        # extract the linked issue id from the commit message
+        self.issue_url = self.extract_issue_url()
 
         self.workflow_statuses = []
         for workflow in ghchain.config.workflows:
@@ -135,21 +128,36 @@ class Commit(BaseModel):
             if workflow_status:
                 self.workflow_statuses.append(workflow_status)
 
-        if self.branch:
-            self.pr_status = PrStatus.from_branchname(self.branch)
-
-            if not self.pr_url:
-                self.pr_url = get_pr_url_for_branch(self.branch)
-
         # Fetch and parse commit notes
         self.notes = get_commit_notes(
-            pr_url=self.pr_url,
-            pr_status=self.pr_status,
+            pr_url=self.pull_request.pr_url if self.pull_request else None,
+            pr_status=self.pull_request.pr_status if self.pull_request else None,
             issue_url=self.issue_url,
             workflow_statuses=self.workflow_statuses,
         )
 
         self.update_notes()
+
+    def extract_issue_id(self) -> Optional[int]:
+        """
+        Extract the issue ID from the commit message if it contains the GitHub issue id
+        in the format: [issue tags] commit header (#issue id)
+        """
+        pattern = re.compile(ghchain.config.issue_pattern)
+        match = pattern.search(self.message)
+
+        if match:
+            return int(match.group(1))
+        return None
+
+    def extract_issue_url(self) -> Optional[str]:
+        """
+        Extract the issue URL from the commit message.
+        """
+        issue_id = self.extract_issue_id()
+        if issue_id:
+            return get_issue_url(issue_id)
+        return None
 
     def update_notes(self):
         # Write the updated notes back to the git notes

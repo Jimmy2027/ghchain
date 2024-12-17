@@ -58,6 +58,41 @@ def ghchain_cli(ctx, create_pr, draft, with_tests):
 
 
 @ghchain_cli.command()
+@click.argument("commit_sha", type=str)
+@click.option(
+    "-p",
+    "--create-pr",
+    is_flag=True,
+    help="If set to True, a pull request will be opened for the commit.",
+)
+@click.option(
+    "--draft",
+    is_flag=True,
+    help="Create the pull request as a draft. This flag sets --create-pr to True.",
+)
+@click.option(
+    "--with-tests",
+    is_flag=True,
+    help="Run the github workflows that are specified in the .ghchain.toml config of the repository.",
+)
+def process_commit(commit_sha, create_pr, draft, with_tests):
+    """
+    Process a single commit by its SHA.
+    """
+    from ghchain.stack import Stack
+
+    stack = Stack.create()
+    commit = next((c for c in stack.commits if c.sha == commit_sha), None)
+    if draft:
+        # when draft is passed, we know that the user wants to publish the PRs
+        create_pr = True
+    if commit:
+        stack.process_commit(commit, create_pr, draft, with_tests)
+    else:
+        click.echo(f"Commit with SHA {commit_sha} not found.")
+
+
+@ghchain_cli.command()
 def refresh():
     """
     Update the commit notes with the PR/ workflow statuses for the commits in the stack.
@@ -122,12 +157,12 @@ def run_workflows(branch):
     Run the github workflows that are specified in the .ghchain.toml config of the repository for the specified branch.
     If '.' or nothing is passed, the current branch will be used.
     """
+    import ghchain
     from ghchain.git_utils import get_current_branch
     from ghchain.github_utils import (
         get_branch_name_for_pr_id,
-        get_pr_url_for_branch,
-        run_tests_on_branch,
     )
+    from ghchain.pull_request import PR, get_open_prs, run_tests_on_branch
 
     branch_name = (
         get_branch_name_for_pr_id(int(branch))
@@ -136,9 +171,21 @@ def run_workflows(branch):
         if branch == "." or not branch
         else branch
     )
-    pr_url = get_pr_url_for_branch(branch_name)
 
-    run_tests_on_branch(branch=branch_name, pr_url=pr_url)
+    if not branch_name:
+        ghchain.logger.error(f"Branch {branch} not found.")
+        return
+
+    branches_to_pr: dict[str, PR] = {pr.head_branch: pr for pr in get_open_prs()}
+
+    pull_request = branches_to_pr.get(branch_name)
+    if not pull_request:
+        ghchain.logger.warning(
+            f"Branch {branch_name} not found or does not have a pull request associated with it."
+            "Running the test without updating the PR description."
+        )
+
+    run_tests_on_branch(branch=branch_name, pull_request=pull_request)
 
 
 @ghchain_cli.command()
