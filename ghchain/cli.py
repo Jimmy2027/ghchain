@@ -162,8 +162,7 @@ def run_workflows(branch):
     from ghchain.github_utils import (
         get_branch_name_for_pr_id,
     )
-    from ghchain.pull_request import run_tests_on_branch
-    from ghchain.stack import Stack
+    from ghchain.pull_request import PR, get_open_prs, run_tests_on_branch
 
     branch_name = (
         get_branch_name_for_pr_id(int(branch))
@@ -177,21 +176,14 @@ def run_workflows(branch):
         ghchain.logger.error(f"Branch {branch} not found.")
         return
 
-    stack = Stack.create()
+    branches_to_pr: dict[str, PR] = {pr.head_branch: pr for pr in get_open_prs()}
 
-    commit = next(
-        (commit for commit in stack.commits if commit.branch == branch_name), None
-    )
-
-    pull_request = None
-    if not commit:
-        ghchain.logger.warning(f"Branch {branch_name} not found in the stack.")
-    elif not commit.pull_request:
+    pull_request = branches_to_pr.get(branch_name)
+    if not pull_request:
         ghchain.logger.warning(
-            f"Branch {branch_name} does not have a pull request associated with it."
+            f"Branch {branch_name} not found or does not have a pull request associated with it."
+            "Running the test without updating the PR description."
         )
-    else:
-        pull_request = commit.pull_request
 
     run_tests_on_branch(branch=branch_name, pull_request=pull_request)
 
