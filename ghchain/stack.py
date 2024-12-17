@@ -34,7 +34,11 @@ class Stack(BaseModel):
     def create(cls, base_branch: Optional[str] = None) -> "Stack":
         """
         Create a Stack object with commits from the current branch which are not in the base branch.
-        Whatever branch is currently checked out will be considered the dev branch.
+
+        Args:
+            base_branch: The base branch to compare the commits against. Defaults to the base branch in the config.
+            dev_branch: The development branch to create the stack from. Defaults to the current branch.
+
         """
 
         sha_to_pull_request_mapping: dict[str, PR] = {
