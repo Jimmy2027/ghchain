@@ -3,7 +3,7 @@ name: Update Changelog Branch
 
 on:
     release:
-        types: [released] # Trigger when a release is published
+        types: [created] # Trigger when a release is created
 
 jobs:
     update_changelog:
