@@ -103,6 +103,7 @@ jobs:
 
             - name: Build source and wheel distribution
               run: |
+                  cat pyproject.toml
                   uv build
 
             - name: Upload artifacts
