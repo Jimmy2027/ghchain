@@ -82,7 +82,8 @@ def handle_land(branch):
                     "--base",
                     ghchain.config.base_branch.replace("origin/", ""),
                 ],
-                check=True,
+                # Don't check here because somethimes github updates the PRs faster than the CLI
+                check=False,
             )
 
         # Delete the remote branch, don't check since the branch might already be deleted
