@@ -188,3 +188,13 @@ jobs:
                   file_pattern: "pyproject.toml"
                   skip_dirty_check: true
                   create_branch: true
+
+            - name: Create Pull Request
+              env:
+                  GH_TOKEN: ${{ github.token }}
+              run: |
+                  gh pr create \
+                    --base main \
+                    --head bump-version-${{ needs.details.outputs.new_version }} \
+                    --title "Automated Pull Request from bump-version-${{ needs.details.outputs.new_version }} to main" \
+                    --body "This is an automated pull request created via GitHub Actions."
