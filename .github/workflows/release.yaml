@@ -60,7 +60,7 @@ jobs:
               run: |
                   PACKAGE_NAME=${{ needs.details.outputs.package_name}}
                   response=$(curl -s https://pypi.org/pypi/$PACKAGE_NAME/json || echo "{}")
-                  latest_previous_version=$(echo $response | grep -oP '"releases":\{"\K[^"]+' | sort -rV | head -n 1)
+                  latest_previous_version=$(echo $response | jq -r '.releases | keys | .[]' | sort -rV | head -n 1)
                   if [ -z "$latest_previous_version" ]; then
                     echo "Package not found on PyPI."
                     latest_previous_version="0.0.0"
