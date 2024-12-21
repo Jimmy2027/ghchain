@@ -96,7 +96,7 @@ jobs:
             - name: Bump version
               run: |
                   NEW_VERSION="${{ needs.details.outputs.new_version }}"
-                  sed -i "s/version = \"$latest_previous_version\"/version = \"$NEW_VERSION\"/" $GITHUB_WORKSPACE/pyproject.toml
+                  sed -i "s/version = \"[0-9]*\.[0-9]*\.[0-9]*\"/version = \"$NEW_VERSION\"/" $GITHUB_WORKSPACE/pyproject.toml
 
             - name: Install dependencies
               run: uv sync
