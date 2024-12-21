@@ -3,15 +3,17 @@ name: Update Changelog Branch
 
 on:
     release:
-        types: [published] # Trigger when a release is published
+        types: [released] # Trigger when a release is published
 
 jobs:
     update_changelog:
         runs-on: ubuntu-latest
+        permissions:
+            contents: write
 
         steps:
             - name: Checkout repository
-              uses: actions/checkout@v3
+              uses: actions/checkout@v4
               with:
                   ref: main
 
@@ -25,13 +27,12 @@ jobs:
               with:
                   release-notes: ${{ github.event.release.body }} # Add release notes to changelog
                   latest-version: ${{ github.event.release.name }} # Add latest version to changelog
-
-            - name: Commit changes
-              run: |
-                  git config --local user.email "github-actions[bot]@users.noreply.github.com"
-                  git config --local user.name "GitHub Actions"
-                  git add CHANGELOG.md
-                  git commit -m "Update Changelog for ${{ github.event.release.name }}"
+            - name: Commit updated CHANGELOG
+              uses: stefanzweifel/git-auto-commit-action@v5
+              with:
+                branch: ${{ github.event.release.target_commitish }}
+                commit_message: Update Changelog for ${{ github.event.release.name }}
+                file_pattern: CHANGELOG.md
 
             - name: Push changes to temporary branch
               run: |
