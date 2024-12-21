@@ -2,8 +2,9 @@
 name: Update Changelog Branch
 
 on:
-    release:
-        types: [created] # Trigger when a release is created
+    workflow_run:
+        workflows: ["setup_and_build"]
+        types: [completed]
 
 jobs:
     update_changelog:
@@ -27,6 +28,7 @@ jobs:
               with:
                   release-notes: ${{ github.event.release.body }} # Add release notes to changelog
                   latest-version: ${{ github.event.release.name }} # Add latest version to changelog
+
             - name: Commit updated CHANGELOG
               uses: stefanzweifel/git-auto-commit-action@v5
               with:
@@ -37,7 +39,7 @@ jobs:
             - name: Push changes to temporary branch
               run: |
                   git push origin HEAD:$BRANCH_NAME
-            # Step 3: Create the pull request using 'gh' command
+
             - name: Create Pull Request
               env:
                   GH_TOKEN: ${{ github.token }}
