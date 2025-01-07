@@ -8,6 +8,7 @@ import pytest
 from click.testing import CliRunner
 from git import Repo
 
+import ghchain
 from ghchain import cli
 from ghchain.config import Config, logger
 from ghchain.git_utils import get_all_branches
@@ -412,5 +413,54 @@ def test_linked_issue(cli_runner, repo_cleanup):
     )
 
 
+@pytest.mark.order(1)
+def test_stack_with_mixed_branch_states(cli_runner, repo_cleanup):
+    """
+    Test ghchain CLI behavior on a stack where:
+    - First branch is pushed to origin.
+    - Second and third branches are local only.
+    - Fourth branch is up to date with origin.
+    """
+    cli_runner, _ = cli_runner
+
+    # Create a stack with 4 commits
+    create_stack()
+
+    # Push the first branch to origin
+    branches = []
+
+    commits = list(ghchain.repo.iter_commits("HEAD", max_count=5))
+    commits.reverse()  # Start from the oldest commit
+
+    for i, commit in enumerate(commits, 0):
+        branch_name = f"branch-{i}"
+        branch = ghchain.repo.create_head(branch_name, commit)
+        branch.checkout()
+        branches.append(branch_name)
+
+    # checkout mydev branch
+    ghchain.repo.git.checkout("mydev")
+
+    stack = Stack.create(base_branch="main")
+
+    first_branch = stack.branches[0]
+    ghchain.repo.git.push("origin", first_branch)
+
+    # Push the fourth branch to origin
+    fourth_branch = stack.branches[3]
+    ghchain.repo.git.push("origin", fourth_branch)
+
+    # Run ghchain CLI on this stack
+    result = cli_runner.invoke(cli.ghchain_cli, ["--create-pr"])
+    assert (
+        result.exit_code == 0
+    ), f"ghchain CLI failed with exit code {result.exit_code}\n{result.output}"
+
+    # Check PRs for the branches
+    prs = run_command(["gh", "pr", "list", "--json", "baseRefName"]).stdout
+    prs = json.loads(prs)
+    assert len(prs) == 4, f"Expected 4 pull requests, got {len(prs)}"
+
+
 if __name__ == "__main__":
-    pytest.main(["-v", __file__, "-s", "-x", "-k linked_issue"])
+    pytest.main(["-v", __file__, "-s", "-x", "-k test_stack_with_mixed_branch_states"])

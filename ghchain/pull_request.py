@@ -40,6 +40,15 @@ class PR:
             f"Creating pull request from {head_branch} to {base_branch}."
         )
 
+        # make sure the head branch is up to date
+        try:
+            ghchain.repo.git.push("origin", head_branch)
+        except Exception:
+            raise click.ClickException(
+                f"Failed to push branch {head_branch} to remote. Please make sure the branch is up to date manually "
+                "or run 'ghchain publish'."
+            )
+
         command = [
             "gh",
             "pr",
