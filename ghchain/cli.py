@@ -181,7 +181,7 @@ def run_workflows(branch):
     pull_request = branches_to_pr.get(branch_name)
     if not pull_request:
         ghchain.logger.warning(
-            f"Branch {branch_name} not found or does not have a pull request associated with it."
+            f"Branch {branch_name} not found or does not have a pull request associated with it. "
             "Running the test without updating the PR description."
         )
 

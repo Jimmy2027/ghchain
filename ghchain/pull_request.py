@@ -101,7 +101,7 @@ def get_open_prs() -> list[PR]:
             pr_status=PrStatus.from_gh_cli_dict(result_dict),
             pr_id=int(result_dict["number"]),
             pr_url=result_dict["url"],
-            head_branch="headRefName",
+            head_branch=result_dict["headRefName"],
             body=result_dict["body"],
             title=result_dict["title"],
             commits=[commit["oid"] for commit in result_dict["commits"]],
