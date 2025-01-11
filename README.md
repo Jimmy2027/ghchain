@@ -171,6 +171,46 @@ A single pull request, with the `with-tests` flag passed, will look like this:
 ### Fixing commits
 
 Your reviewer is verry happy with your small pull request, but would like you to fix a small issue in `commit 1`.
+You can fix this issue in two ways:
+
+#### With `ghchain fixup`
+
+`ghchain` implements a wrapper around the `git rebase --onto` command to easily fix a commit:
+
+```shell
+$ ghchain fixup --help
+  Commands to fixup a commit and rebase the stack.
+
+  Wrapper around "git rebase --onto <bottom-branch> <old-base> <top-branch>"
+  to rebase the stack onto a modified commit.
+
+  Example usage:
+
+      1. To fix a commit of branch 'feature-branch':
+         $ ghchain fixup start feature-branch
+
+      2. Make your changes and stage them:
+         $ git add <modified-files>
+         $ git commit --amend --no-edit
+
+      3. Complete the fixup and rebase the stack:
+         $ ghchain fixup done
+
+Options:
+  --help  Show this message and exit.
+
+Commands:
+  done   Complete the fixup process and rebase the stack.
+  start  Start the fixup process for a specific commit or branch.
+
+```
+
+`commit 1` belongs to the branch `hk-134`.
+Running `ghchain fixup start hk-134` will checkout `hk-134` but keep track of the old ref.
+Make the changes to the commit and run `ghchain fixup done` to rebase the stack on top of the new commit.
+
+#### Manually
+
 You stash your new changes from `mydev` and checkout the branch `hk-134`.
 You fix the issue with either `git commit --amend` or `git commit --fixup b64c30667ad23847e981e4c9bafe8eee3ffb0881` and push the changes.
 

@@ -468,5 +468,41 @@ def test_stack_with_mixed_branch_states(cli_runner, repo_cleanup):
     assert len(prs) == 4, f"Expected 4 pull requests, got {len(prs)}"
 
 
+@pytest.mark.order(1)
+def test_fixup(cli_runner, repo_cleanup):
+    """
+    Test that fixup commits are correctly processed.
+    """
+    cli_runner, tempdir = cli_runner
+
+    repo = Repo(tempdir)
+    current_branch = repo.active_branch
+
+    # Create a stack with 4 commits
+    create_stack()
+
+    # Run ghchain CLI to process the commits
+    result = cli_runner.invoke(cli.ghchain_cli)
+
+    stack = Stack.create()
+    # Start the fixup process
+    result = cli_runner.invoke(cli.fixup, ["start", stack.commits[0].branch])
+
+    assert result.exit_code == 0
+    assert tempdir.join(".ghchain_fixup_state").exists()
+
+    run_command(["touch", "new_file"])
+    run_command(["git", "add", "new_file"])
+
+    # run the fixup done command
+    result = cli_runner.invoke(cli.fixup, ["done"])
+
+    assert result.exit_code == 0
+    assert not tempdir.join(".ghchain_fixup_state").exists()
+
+    assert tempdir.join("new_file").exists()
+    assert repo.active_branch == current_branch
+
+
 if __name__ == "__main__":
-    pytest.main(["-v", __file__, "-s", "-x", "-k test_run_tests"])
+    pytest.main(["-v", __file__, "-s", "-x", "-k test_fixup"])

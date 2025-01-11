@@ -244,5 +244,168 @@ def publish():
     stack.publish()
 
 
+###############################
+# Fixup commands
+###############################
+
+STATE_FILE = ".ghchain_fixup_state"
+
+
+@ghchain_cli.group()
+def fixup():
+    """
+    Commands to fixup a commit and rebase the stack.
+
+    Wrapper around "git rebase --onto <bottom-branch> <old-base> <top-branch>" to rebase
+    the stack onto a modified commit.
+
+    Example usage:
+
+      \b
+      1. To fix a commit of branch 'feature-branch':
+         $ ghchain fixup start feature-branch
+
+      \b
+      2. Make your changes and stage them:
+         $ git add <modified-files>
+         $ git commit --amend --no-edit
+
+      \b
+      3. Complete the fixup and rebase the stack:
+         $ ghchain fixup done
+    """
+    pass
+
+
+@fixup.command()
+@click.argument("ref")
+def start(ref):
+    """
+    Start the fixup process for a specific commit or branch.
+    To fixup a commit, pass the commit SHA. If the commit has a branch associated with it,
+    the branch will not be update!
+    To fixup a branch, pass the branch name.
+    """
+    import json
+    from pathlib import Path
+
+    import ghchain
+    from ghchain import logger
+
+    state_file = Path(STATE_FILE)
+
+    # Check if a fixup state file already exists
+    if state_file.exists():
+        if not click.confirm(
+            "A fixup state file already exists. Do you want to delete it and start a new fixup? "
+            "This will remove the previous state and reset the process."
+        ):
+            return
+        state_file.unlink()
+
+    repo = ghchain.repo
+    is_branch = ref in [branch.name for branch in repo.branches]
+
+    current_branch = repo.active_branch
+    logger.warning(
+        f"Using current branch: {current_branch.name} as top branch."
+        " This branch and all intermediate branches will be rebased."
+    )
+
+    if is_branch:
+        repo.git.checkout(ref)
+        base = repo.commit(ref)
+    else:
+        repo.git.checkout(ref)
+        base = repo.commit(ref)
+
+    state_file.write_text(
+        json.dumps(
+            {
+                "old_base": base.hexsha,
+                "top_branch": current_branch.name,
+            }
+        )
+    )
+    click.echo(f"Checked out {ref}. Make your changes and stage them.")
+
+
+@fixup.command()
+@click.option(
+    "-p",
+    "--publish",
+    is_flag=True,
+    help="Publish all updated branches in the stack to the remote after rebasing.",
+)
+def done(publish):
+    """
+    Complete the fixup process and rebase the stack. Optionally publish the updated branches.
+    """
+    import json
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    import ghchain
+    from ghchain.stack import Stack
+    from ghchain.utils import run_command
+
+    state_file = Path(STATE_FILE)
+    if not state_file.exists():
+        click.echo(
+            "No fixup state found. Run `ghchain fixup <commit-or-branch>` first."
+        )
+        return
+
+    state = json.loads(state_file.read_text())
+    old_base = state["old_base"]
+    top_branch = state["top_branch"]
+
+    # check that anything is changed
+    if not ghchain.repo.index.diff(old_base):
+        click.echo("No changes detected. Nothing to fixup.")
+        return
+
+    if ghchain.repo.index.diff("HEAD"):
+        click.echo("Found staged changes. Amending the last commit.")
+        run_command(["git", "commit", "--amend", "--no-edit"], check=True)
+
+    repo = ghchain.repo
+    new_base = repo.head.commit.hexsha
+
+    click.echo("Rebasing the stack...")
+    try:
+        run_command(
+            [
+                "git",
+                "rebase",
+                "--onto",
+                new_base,
+                old_base,
+                top_branch,
+                "--update-refs",
+            ],
+            check=True,
+        )
+    except subprocess.CalledProcessError:
+        click.echo("Failed to rebase the stack.")
+        click.echo("Finish the rebase manually. Deleting the fixup state file.")
+        state_file.unlink()
+        sys.exit(1)
+
+    # Checkout the top branch again
+    repo.git.checkout(top_branch)
+
+    state_file.unlink()
+    click.echo("Fixup complete. Stack updated successfully.")
+
+    if publish:
+        click.echo("Publishing updated branches...")
+
+        stack = Stack.create()
+        stack.publish()
+        click.echo("All updated branches have been published.")
+
+
 if __name__ == "__main__":
     ghchain_cli()
