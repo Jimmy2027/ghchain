@@ -31,7 +31,9 @@ class Stack(BaseModel):
     base_branch: str
 
     @classmethod
-    def create(cls, base_branch: Optional[str] = None) -> "Stack":
+    def create(
+        cls, base_branch: Optional[str] = None, with_workflow_status: bool = False
+    ) -> "Stack":
         """
         Create a Stack object with commits from the current branch which are not in the base branch.
 
@@ -58,7 +60,7 @@ class Stack(BaseModel):
         # Reverse log output to start from the bottom of the stack
         for commit in reversed(list(commits_diff)):
             sha = commit.hexsha
-            message = commit.message.strip()
+            message = str(commit.message.strip())
             is_fixup = message.startswith("fixup!")
 
             # Find branches that point to this commit (branches where this commit is the HEAD)
@@ -78,10 +80,10 @@ class Stack(BaseModel):
 
             branch = pointing_branches.pop() if pointing_branches else None
             commit_obj = Commit(
+                with_workflow_status=with_workflow_status,
                 sha=sha,
                 branch=branch,
                 message=message,
-                is_fixup=is_fixup,
                 pull_request=sha_to_pull_request_mapping.get(sha),
             )
             commits.append(commit_obj)

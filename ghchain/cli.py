@@ -99,7 +99,7 @@ def refresh():
     """
     from ghchain.stack import Stack
 
-    Stack.create()
+    Stack.create(with_workflow_status=True)
 
 
 @ghchain_cli.command()

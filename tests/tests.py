@@ -339,7 +339,7 @@ def test_run_tests(cli_runner, repo_cleanup, with_prs):
     result = cli_runner.invoke(cli.run_workflows, ["-b", stack.commits[0].branch])
 
     time.sleep(30)
-    stack = Stack.create()
+    stack = Stack.create(with_workflow_status=True)
 
     # verify that the commit notes have been updated
     assert (
@@ -505,4 +505,4 @@ def test_fixup(cli_runner, repo_cleanup):
 
 
 if __name__ == "__main__":
-    pytest.main(["-v", __file__, "-s", "-x", "-k test_fixup"])
+    pytest.main(["-v", __file__, "-s", "-x", "-k test_run_tests[True]"])

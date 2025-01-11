@@ -96,6 +96,18 @@ def get_commit_notes(
     return notes_str
 
 
+def get_workflow_status(commit_id: str):
+    """
+    Get the configured workflows status for a given commit id.
+    """
+    workflow_statuses = []
+    for workflow in ghchain.config.workflows:
+        workflow_status = WorkflowStatus.from_commit_id(workflow, commit_id=commit_id)
+        if workflow_status:
+            workflow_statuses.append(workflow_status)
+    return workflow_statuses
+
+
 class Commit(BaseModel):
     """
     Commit object with sha, message, branch, pr_url, notes, and pr_status.
@@ -114,19 +126,24 @@ class Commit(BaseModel):
     class Config:
         arbitrary_types_allowed = True
 
-    def __init__(self, **data):
-        super().__init__(**data)
+    def __init__(
+        self,
+        with_workflow_status: bool,
+        sha: str,
+        branch: str | None,
+        message: str,
+        pull_request: PR | None,
+    ):
+        super().__init__(
+            sha=sha, message=message, branch=branch, pull_request=pull_request
+        )
 
         # extract the linked issue id from the commit message
         self.issue_url = self.extract_issue_url()
 
-        self.workflow_statuses = []
-        for workflow in ghchain.config.workflows:
-            workflow_status = WorkflowStatus.from_commit_id(
-                workflow, commit_id=data["sha"]
-            )
-            if workflow_status:
-                self.workflow_statuses.append(workflow_status)
+        self.workflow_statuses = (
+            None if not with_workflow_status else get_workflow_status(sha)
+        )
 
         # Fetch and parse commit notes
         self.notes = get_commit_notes(
