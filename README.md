@@ -16,9 +16,6 @@ This tool is heavily inspired by [ghstack](https://github.com/ezyang/ghstack) an
     -   workflow status, to see if the workflows have passed.
     -   status checks, to see if the status checks have passed.
 
-> [!CAUTION]
-> Running `ghchain` with multiple branches containing the same commit may lead to conflicts or errors.
-
 # Configuration
 
 Configure ghchain using a .ghchain.toml file in the root of your repository.
@@ -60,9 +57,8 @@ Usage: ghchain [OPTIONS] COMMAND [ARGS]...
   each branch.
 
   ghchain --with-tests: will create a branch for each commit in the stack that
-  doesn't already have one, push it to the remote and run the github
-  workflows that are specified in the .ghchain.toml config of the
-  repository.
+  doesn't already have one, push it to the remote and run the github workflows
+  that are specified in the .ghchain.toml config of the repository.
 
 Options:
   -p, --create-pr  If set to True, a pull request will be opened for every
@@ -74,12 +70,14 @@ Options:
   --help           Show this message and exit.
 
 Commands:
-  fix-refs       If you messed up your stack with a rebase and lost the...
-  land           Merge the specified branch into the configured base branch.
-  publish        Publish all updated branches in the stack to the remote.
-  rebase         Rebase the current branch onto branch, using...
-  refresh        Update the commit notes with the PR/ workflow statuses...
-  run-workflows  Run the github workflows that are specified in the...
+  fix-refs        If you messed up your stack with a rebase and lost the...
+  fixup           Commands to fixup a commit and rebase the stack.
+  land            Merge the specified branch into the configured base...
+  process-commit  Process a single commit by its SHA.
+  publish         Publish all updated branches in the stack to the remote.
+  rebase          Rebase the current branch onto branch, using...
+  refresh         Update the commit notes with the PR/ workflow statuses...
+  run-workflows   Run the github workflows that are specified in the...
 ```
 
 ## Usage Example
