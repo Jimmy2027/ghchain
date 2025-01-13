@@ -4,7 +4,7 @@ requires = ["setuptools>=61", "setuptools-scm[toml]>=6.2.3"]
 
 [project]
 name = "ghchain"
-version = "0.1.6"
+version = "0.1.7"
 description = "Chain pull requests from your devbranch's commits."
 readme = "README.md"
 license = { text = "MIT license" }
