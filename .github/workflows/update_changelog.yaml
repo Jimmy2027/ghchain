@@ -2,15 +2,16 @@
 name: Update Changelog Branch
 
 on:
-    workflow_run:
-        workflows: ["setup_and_build"]
-        types: [completed]
+    workflow_dispatch:
+    release:
+        types: [published]
 
 jobs:
     update_changelog:
         runs-on: ubuntu-latest
         permissions:
             contents: write
+            pull-requests: write
 
         steps:
             - name: Checkout repository
