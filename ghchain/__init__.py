@@ -14,7 +14,7 @@ from loguru import logger
 from ghchain.config import Config
 
 try:
-    repo = Repo(".")
+    repo = Repo(".", search_parent_directories=True)
 except Exception:
     logger.error("Could not find a git repository in the current directory.")
     sys.exit(1)
