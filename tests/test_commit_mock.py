@@ -25,7 +25,13 @@ def test_extract_issue_url(mock_update_notes, mock_get_issue_url):
     ]
 
     for case in test_cases:
-        commit = Commit(sha="dummy_sha", message=case["message"])
+        commit = Commit(
+            sha="dummy_sha",
+            message=case["message"],
+            branch="dummy_branch",
+            pull_request=None,
+            with_workflow_status=False,
+        )
         issue_id = commit.extract_issue_id()
         assert issue_id == case["expected_issue_id"]
 

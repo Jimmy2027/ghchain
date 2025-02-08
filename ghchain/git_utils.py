@@ -138,10 +138,7 @@ def get_commit_message_to_branch_mapping() -> dict[str, str]:
     Returns:
         dict[str, str]: A dictionary mapping commit messages to branch names.
     """
-    return {
-        branch.commit.message.replace("\n", ""): branch.name
-        for branch in ghchain.repo.branches
-    }
+    return {branch.commit.message: branch.name for branch in ghchain.repo.branches}
 
 
 def get_issue_url(issue_id: int) -> str:
