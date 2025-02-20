@@ -244,6 +244,17 @@ def publish():
     stack.publish()
 
 
+@ghchain_cli.command()
+def download():
+    """
+    Download the stack branches from the remote.
+    """
+    from ghchain.stack import Stack
+
+    stack = Stack.create()
+    stack.download()
+
+
 ###############################
 # Fixup commands
 ###############################

@@ -248,6 +248,26 @@ class Stack(BaseModel):
 
         logger.info("Publishing complete.")
 
+    def download(self):
+        """
+        Pull rebase every local branch in the stack with origin.
+        """
+        for commit in self.commits:
+            if not commit.branch:
+                logger.trace(
+                    f"Commit {commit.sha} does not have an associated branch. Skipping."
+                )
+                continue
+
+            branch_name = commit.branch
+            try:
+                ghchain.repo.git.checkout(branch_name)
+                ghchain.repo.git.pull("--rebase", "origin", branch_name)
+            except Exception as e:
+                logger.error(f"Failed to pull rebase branch {branch_name}: {e}")
+
+        logger.info("Download complete.")
+
 
 def find_branch_of_rebased_commit(commit: Commit) -> str:
     """
