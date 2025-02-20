@@ -2,7 +2,7 @@ import re
 from typing import Optional
 
 import pandas as pd
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 import ghchain
 from ghchain.git_utils import get_issue_url
@@ -117,6 +117,7 @@ class Commit(BaseModel):
     sha: str
     message: str
     branch: str | None = None
+    remote_branches: list[str] = Field(default_factory=list)
     # if the commit is linked to an issue:
     issue_url: str | None = None
     pull_request: PR | None = None
@@ -131,11 +132,16 @@ class Commit(BaseModel):
         with_workflow_status: bool,
         sha: str,
         branch: str | None,
+        remote_branches: list[str],
         message: str,
         pull_request: PR | None,
     ):
         super().__init__(
-            sha=sha, message=message, branch=branch, pull_request=pull_request
+            sha=sha,
+            message=message,
+            branch=branch,
+            pull_request=pull_request,
+            remote_branches=remote_branches,
         )
 
         # extract the linked issue id from the commit message

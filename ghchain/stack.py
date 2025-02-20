@@ -1,3 +1,4 @@
+from collections import defaultdict
 from typing import List, Optional
 
 import click
@@ -42,64 +43,63 @@ class Stack(BaseModel):
             dev_branch: The development branch to create the stack from. Defaults to the current branch.
 
         """
-
         sha_to_pull_request_mapping: dict[str, PR] = {
             pr.commits[-1]: pr for pr in get_open_prs()
         }
 
-        if not base_branch:
-            base_branch = ghchain.config.base_branch
+        base_branch = base_branch or ghchain.config.base_branch
         dev_branch = get_current_branch()
 
         logger.debug(f"Creating stack with dev branch: {dev_branch}")
 
-        # Fetch the commits that are in dev_branch but not in base_branch
-        commits_diff = ghchain.repo.iter_commits(f"{base_branch}..{dev_branch}")
+        # Create mappings for commit SHA to local and remote branch names
+        commit_to_local_refs = defaultdict(list)
+        commit_to_remote_refs = defaultdict(list)
+        for ref in ghchain.repo.references:
+            if not ref.commit:
+                continue
+            commit_sha = ref.commit.hexsha
+            if ref.name.startswith("origin/"):
+                commit_to_remote_refs[commit_sha].append(ref.name)
+            elif "/" not in ref.name:  # assuming local branch names do not contain '/'
+                commit_to_local_refs[commit_sha].append(ref.name)
+            else:
+                logger.info(f"Unsupported ref format: {ref.name}")
 
+        # Fetch commits in dev_branch but not in base_branch
+        commits_diff = list(ghchain.repo.iter_commits(f"{base_branch}..{dev_branch}"))
         commits = []
-        # Reverse log output to start from the bottom of the stack
-        for commit in reversed(list(commits_diff)):
+
+        # Process commits in reverse order (bottom of the stack first)
+        for commit in reversed(commits_diff):
             sha = commit.hexsha
-            message = str(commit.message.strip())
+            message = commit.message.strip()
             is_fixup = message.startswith("fixup!")
 
-            # Find branches that point to this commit (branches where this commit is the HEAD)
-            pointing_branches = [
-                ref.name.split("/")[-1]
-                for ref in ghchain.repo.branches
-                if ref.commit == commit
-            ]
-            pointing_branches = set(pointing_branches) - {
-                dev_branch
-            }  # Exclude the dev branch
-
+            # Exclude the dev branch from local branch candidates
+            pointing_branches = set(commit_to_local_refs[sha]) - {dev_branch}
             if len(pointing_branches) > 1:
                 error_message = f"Commit {sha} has multiple branches: {pointing_branches}. This is not supported."
                 logger.error(error_message)
                 raise ValueError(error_message)
-
             branch = pointing_branches.pop() if pointing_branches else None
+
             commit_obj = Commit(
                 with_workflow_status=with_workflow_status,
                 sha=sha,
                 branch=branch,
+                remote_branches=commit_to_remote_refs[sha],
                 message=message,
                 pull_request=sha_to_pull_request_mapping.get(sha),
             )
             commits.append(commit_obj)
 
             if is_fixup:
-                # Find the previous commit that is not a fixup and assign it the same branch
-                target_commit = next(
-                    (
-                        commit
-                        for commit in commits[::-1]
-                        if not commit.is_fixup and not commit.branch
-                    ),
-                    None,
-                )
-                if target_commit:
-                    target_commit.branch = commit_obj.branch
+                # Assign branch to the most recent non-fixup commit without a branch
+                for previous_commit in reversed(commits[:-1]):
+                    if not previous_commit.is_fixup and not previous_commit.branch:
+                        previous_commit.branch = commit_obj.branch
+                        break
 
         return cls(commits=commits, dev_branch=dev_branch, base_branch=base_branch)
 
@@ -253,13 +253,20 @@ class Stack(BaseModel):
         Pull rebase every local branch in the stack with origin.
         """
         for commit in self.commits:
-            if not commit.branch:
+            if not commit.remote_branches:
                 logger.trace(
                     f"Commit {commit.sha} does not have an associated branch. Skipping."
                 )
                 continue
 
-            branch_name = commit.branch
+            if not len(commit.remote_branches) == 1:
+                logger.error(
+                    f"Commit {commit.sha} has multiple remote branches: {commit.remote_branches}."
+                )
+                raise ValueError(
+                    f"Commit {commit.sha} has multiple remote branches: {commit.remote_branches}."
+                )
+            branch_name = commit.remote_branches[0].split("/")[-1]
             try:
                 ghchain.repo.git.checkout(branch_name)
                 ghchain.repo.git.pull("--rebase", "origin", branch_name)

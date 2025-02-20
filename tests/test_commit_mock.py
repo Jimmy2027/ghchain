@@ -29,6 +29,7 @@ def test_extract_issue_url(mock_update_notes, mock_get_issue_url):
             sha="dummy_sha",
             message=case["message"],
             branch="dummy_branch",
+            remote_branches=[],
             pull_request=None,
             with_workflow_status=False,
         )

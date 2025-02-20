@@ -504,5 +504,37 @@ def test_fixup(cli_runner, repo_cleanup):
     assert repo.active_branch == current_branch
 
 
+def test_download(cli_runner, repo_cleanup):
+    """
+    Create a stack
+    run ghchain publish
+    delete all local branches
+    run ghchain download
+    """
+    cli_runner, tempdir = cli_runner
+
+    # Create a stack with 4 commits
+    create_stack()
+
+    # Run ghchain CLI to process the commits
+    result = cli_runner.invoke(cli.ghchain_cli)
+
+    assert result.exit_code == 0
+
+    Stack.create()
+    # delete all local branches
+    local_branches = set(get_all_branches())
+    for branch in local_branches:
+        run_command(["git", "branch", "-D", branch])
+
+    result = cli_runner.invoke(cli.download)
+
+    assert result.exit_code == 0
+
+    # Check that the branches have been restored
+    branches = set(get_all_branches())
+    assert branches == local_branches - {"main"}
+
+
 if __name__ == "__main__":
-    pytest.main(["-v", __file__, "-s", "-x", "-k test_run_tests[True]"])
+    pytest.main(["-v", __file__, "-s", "-x", "-k test_download"])
