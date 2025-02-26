@@ -179,6 +179,9 @@ class Stack(BaseModel):
                 body=commit.message,
                 draft=draft,
                 commit_sha=commit.sha,
+                linked_issue=int(commit.issue_url.split("/")[-1])
+                if commit.issue_url
+                else None,
             )
             pr_created = True
 

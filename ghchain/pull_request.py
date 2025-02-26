@@ -31,10 +31,18 @@ class PR:
     body: str
     title: str
     commits: list[str]
+    linked_issue: Optional[int] = None
 
     @classmethod
     def create_pull_request(
-        cls, base_branch, head_branch, title, body, commit_sha, draft=False
+        cls,
+        base_branch,
+        head_branch,
+        title,
+        body,
+        commit_sha,
+        draft=False,
+        linked_issue: Optional[int] = None,
     ) -> Optional["PR"]:
         ghchain.logger.info(
             f"Creating pull request from {head_branch} to {base_branch}."
@@ -48,6 +56,10 @@ class PR:
                 f"Failed to push branch {head_branch} to remote. Please make sure the branch is up to date manually "
                 "or run 'ghchain publish'."
             )
+
+        # if the PR is linked to an issue, let the PR close the issue
+        if linked_issue:
+            body += f"\n\nCloses #{linked_issue}"
 
         command = [
             "gh",
@@ -78,6 +90,7 @@ class PR:
                 body=body,
                 title=title,
                 commits=[commit_sha],
+                linked_issue=linked_issue,
             )
 
         click.echo("Failed to create pull request.")
@@ -153,7 +166,6 @@ def update_pr_descriptions(pr_stack: list[PR]):
     prs_str = f"{', '.join([f'#{pr.pr_id}' for pr in pr_stack])}"
     ghchain.logger.info(f"Updating PR descriptions of {prs_str}.")
 
-    # TODO: check that I'm the author of the PR
     for pr in pr_stack:
         updated_body = update_pr_stacklist_description(pr.body, pr.pr_url, pr_stack)
 

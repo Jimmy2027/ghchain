@@ -362,36 +362,41 @@ def test_linked_issue(cli_runner, repo_cleanup):
     and the branch is linked to the corresponding GitHub issue.
     """
     cli_runner, _ = cli_runner
+    issue_urls = []
+    issue_ids = []
 
-    # Step 1: Create a new GitHub issue
-    issue_title = "Test issue for linking"
-    issue_body = "This issue is created for testing branch linking in ghchain."
-    issue_creation_result = run_command(
-        [
-            "gh",
-            "issue",
-            "create",
-            "--title",
-            issue_title,
-            "--body",
-            issue_body,
-        ],
-    )
-    assert (
-        issue_creation_result.returncode == 0
-    ), f"Issue creation failed: {issue_creation_result.stderr}"
+    for issue_nbr in range(2):
+        # Step 1: Create a new GitHub issue
+        issue_title = f"Test issue for linking (#{issue_nbr})"
+        issue_body = "This issue is created for testing branch linking in ghchain."
+        issue_creation_result = run_command(
+            [
+                "gh",
+                "issue",
+                "create",
+                "--title",
+                issue_title,
+                "--body",
+                issue_body,
+            ],
+        )
+        assert (
+            issue_creation_result.returncode == 0
+        ), f"Issue creation failed: {issue_creation_result.stderr}"
 
-    # Extract the issue number from the output
-    issue_url = issue_creation_result.stdout.strip()
-    issue_id = int(issue_url.split("/")[-1])
+        # Extract the issue number from the output
+        issue_url = issue_creation_result.stdout.strip()
+        issue_id = int(issue_url.split("/")[-1])
+        issue_urls.append(issue_url)
+        issue_ids.append(issue_id)
 
-    # Step 2: Create a commit with a linked issue reference
-    run_command(["git", "checkout", "mydev"])
-    with open("README.md", "a") as f:
-        f.write("This commit is linked to an issue.\n")
-    run_command(["git", "add", "README.md"])
-    commit_message = f"Add feature linked to issue (#{issue_id})"
-    run_command(["git", "commit", "-m", commit_message])
+        # Step 2: Create a commit with a linked issue reference
+        run_command(["git", "checkout", "mydev"])
+        with open("README.md", "a") as f:
+            f.write(f"This commit is linked to an issue {issue_nbr}.\n")
+        run_command(["git", "add", "README.md"])
+        commit_message = f"Add feature linked to issue (#{issue_id})"
+        run_command(["git", "commit", "-m", commit_message])
 
     # Step 3: Run ghchain to process the commit
     result = cli_runner.invoke(cli.ghchain_cli)
@@ -401,22 +406,40 @@ def test_linked_issue(cli_runner, repo_cleanup):
 
     # Step 4: Check that the commit was processed correctly
     stack = Stack.create()
-    assert len(stack.commits) == 1, "Expected 1 commit in the stack"
+    assert len(stack.commits) == 2, "Expected 2 commits in the stack"
 
-    commit = stack.commits[0]
-    assert (
-        commit.issue_url == issue_url
-    ), f"Expected issue_id {issue_url}, got {commit.issue_url}"
-    assert commit.branch is not None, "Expected branch to be created for the commit"
+    for commit_idx, commit in enumerate(stack.commits):
+        assert (
+            commit.issue_url == issue_urls[commit_idx]
+        ), f"Expected issue_id {issue_urls[commit_idx]}, got {commit.issue_url}"
+        assert commit.branch is not None, "Expected branch to be created for the commit"
 
-    # Step 5: Verify that the branch is linked to the GitHub issue
-    issue_branches = run_command(
-        ["gh", "issue", "develop", "--list", str(issue_id)]
-    ).stdout
-    assert issue_branches.split("\t")[0] == commit.branch, (
-        f"Expected branch {commit.branch} to be linked to issue {issue_id}, "
-        f"got {issue_branches}"
-    )
+        # Step 5: Verify that the branch is linked to the GitHub issue
+        issue_branches = run_command(
+            ["gh", "issue", "develop", "--list", str(issue_ids[commit_idx])]
+        ).stdout
+        assert issue_branches.split("\t")[0] == commit.branch, (
+            f"Expected branch {commit.branch} to be linked to issue {issue_ids[commit_idx]}, "
+            f"got {issue_branches}"
+        )
+    # Open a PR for the commits
+    result = cli_runner.invoke(cli.ghchain_cli, ["--create-pr"])
+    stack = Stack.create()
+
+    # Check that the PRs have been created with the correct linked issue
+    # for commit_idx, commit in enumerate(stack.commits):
+    #     pr_id = commit.pull_request.pr_id
+
+    # TODO: not yet possible to check the linked issue of a PR:
+    # https://github.com/cli/cli/issues/8900
+    # pr_issue = run_command(
+    #     ["gh", "pr", "view", str(pr_id), "--json", "issue"],
+    # ).stdout
+    # pr_issue = json.loads(pr_issue)
+    # assert pr_issue["issue"]["number"] == issue_ids[commit_idx], (
+    #     f"Expected PR to be linked to issue {issue_ids[commit_idx]}, "
+    #     f"got {pr_issue['issue']['number']}"
+    # )
 
 
 @pytest.mark.order(1)
@@ -537,4 +560,4 @@ def test_download(cli_runner, repo_cleanup):
 
 
 if __name__ == "__main__":
-    pytest.main(["-v", __file__, "-s", "-x", "-k test_download"])
+    pytest.main(["-v", __file__, "-s", "-x", "-k test_linked_issue"])
