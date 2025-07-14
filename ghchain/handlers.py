@@ -1,15 +1,15 @@
 import json
-
 import click
-
 import ghchain
+import textwrap
 from ghchain.utils import run_command
 
 
 def handle_land(branch):
     """
     Merge the specified branch into the configured base branch.
-    This will close the corresponding PRs and delete the branch if configured to do so.
+    This will close the corresponding PRs, close any linked issues,
+    and delete the branch if configured to do so.
     """
 
     if (
@@ -36,7 +36,7 @@ def handle_land(branch):
             )
             return
 
-    # update the base branch
+    # update the base branch locally and push it to origin
     run_command(
         [
             "git",
@@ -51,6 +51,71 @@ def handle_land(branch):
         ["git", "push", "origin", ghchain.config.base_branch.replace("origin/", "")],
         check=True,
     )
+
+    # Close linked issues for the PR associated with this branch
+    try:
+        # Retrieve PR number for this branch
+        pr_data = json.loads(
+            run_command(
+                ["gh", "pr", "view", branch, "--json", "number"], check=True
+            ).stdout
+        )
+        pr_number = pr_data["number"]
+        ghchain.logger.info(f"Found PR #{pr_number} for branch '{branch}'.")
+    except Exception as e:
+        ghchain.logger.error(f"Failed to get PR number for branch '{branch}': {e}")
+        pr_number = None
+
+    if pr_number:
+        # GraphQL query to fetch linked issues that will be closed by this PR
+        query = textwrap.dedent("""
+            query ($owner: String!, $repo: String!, $pr: Int!) {
+                repository(owner: $owner, name: $repo) {
+                    pullRequest(number: $pr) {
+                        closingIssuesReferences(first: 100) {
+                            nodes {
+                                number
+                            }
+                        }
+                    }
+                }
+            }
+        """)
+        try:
+            # Execute the GraphQL query via gh CLI
+            output = run_command(
+                [
+                    "gh",
+                    "api",
+                    "graphql",
+                    "-F",
+                    f"owner={ghchain.repo.owner}",
+                    "-F",
+                    f"repo={ghchain.repo.name}",
+                    "-F",
+                    f"pr={pr_number}",
+                    "-f",
+                    f"query={query}",
+                    "--jq",
+                    ".data.repository.pullRequest.closingIssuesReferences.nodes[].number",
+                ],
+                check=True,
+            ).stdout.strip()
+
+            if output:
+                # Each line is an issue number
+                issue_numbers = output.splitlines()
+                for issue in issue_numbers:
+                    ghchain.logger.info(
+                        f"Closing linked issue #{issue} for PR #{pr_number}"
+                    )
+                    run_command(["gh", "issue", "close", issue], check=False)
+            else:
+                ghchain.logger.info("No linked issues found for this PR.")
+        except Exception as e:
+            ghchain.logger.error(
+                f"Failed to close linked issues for PR #{pr_number}: {e}"
+            )
 
     if ghchain.config.delete_branch_after_merge:
         # List all open PRs targeting the branch to be deleted
@@ -82,11 +147,11 @@ def handle_land(branch):
                     "--base",
                     ghchain.config.base_branch.replace("origin/", ""),
                 ],
-                # Don't check here because somethimes github updates the PRs faster than the CLI
+                # Don't check here because sometimes GitHub updates the PRs faster than the CLI
                 check=False,
             )
 
-        # Delete the remote branch, don't check since the branch might already be deleted
+        # Delete the remote branch (ignore errors if already deleted)
         run_command(["git", "push", "origin", "--delete", branch], check=False)
         # Delete the local branch
         run_command(["git", "branch", "-D", branch], check=True)

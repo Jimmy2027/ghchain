@@ -59,7 +59,7 @@ class PR:
 
         # if the PR is linked to an issue, let the PR close the issue
         if linked_issue:
-            body += f"\n\nCloses #{linked_issue}"
+            body += f"\n\nFixes #{linked_issue}"
 
         command = [
             "gh",
