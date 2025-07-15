@@ -162,15 +162,19 @@ def create_branch_from_issue(issue_id: int, base_commit: str) -> str:
     if match:
         branch_name = match.group(1)
         # fetch the origin
-        ghchain.repo.remotes.origin.fetch()
+        ghchain.repo.remotes[ghchain.config.remote].fetch()
         # Create a new branch pointing to the base commit
         branch = ghchain.repo.create_head(branch_name, base_commit)
 
         # Set the branch to track the remote branch
-        branch.set_tracking_branch(ghchain.repo.remotes.origin.refs[branch_name])
+        branch.set_tracking_branch(
+            ghchain.repo.remotes[ghchain.config.remote].refs[branch_name]
+        )
 
         # Push the updated branch to the remote
-        ghchain.repo.git.push("origin", f"{branch_name}:{branch_name}", force=True)
+        ghchain.repo.git.push(
+            ghchain.config.remote, f"{branch_name}:{branch_name}", force=True
+        )
 
         return branch_name
     else:

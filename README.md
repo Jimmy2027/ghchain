@@ -24,6 +24,7 @@ Current configuration options include:
 ```toml
 workflows = []  # List of GitHub Actions workflows to run with the tests flags
 base_branch = "origin/main"  # Base branch for the PRs
+remote = "origin" # The remote to push to
 branch_name_template = "{git_config_author}-{pr_id}"  # Template for naming branches, customizable to include author name and a PR identifier.
 delete_branch_after_merge = true  # Whether to delete the branch after the PR is merged
 log_file = "path/to/ghchain.log"  # Path to the log file

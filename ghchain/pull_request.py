@@ -50,7 +50,7 @@ class PR:
 
         # make sure the head branch is up to date
         try:
-            ghchain.repo.git.push("origin", head_branch)
+            ghchain.repo.git.push(ghchain.config.remote, head_branch)
         except Exception:
             raise click.ClickException(
                 f"Failed to push branch {head_branch} to remote. Please make sure the branch is up to date manually "

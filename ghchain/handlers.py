@@ -15,7 +15,7 @@ def handle_land(branch):
     if (
         branch not in ghchain.repo.branches
         or ghchain.repo.branches[branch].commit
-        != ghchain.repo.remotes.origin.refs[branch].commit
+        != ghchain.repo.remotes[ghchain.config.remote].refs[branch].commit
     ):
         # if the branch is not up to date, pull the latest changes
         if click.confirm(
@@ -23,7 +23,8 @@ def handle_land(branch):
         ):
             try:
                 run_command(
-                    ["git", "fetch", "origin", f"{branch}:{branch}"], check=True
+                    ["git", "fetch", ghchain.config.remote, f"{branch}:{branch}"],
+                    check=True,
                 )
             except Exception as e:
                 ghchain.logger.error(
@@ -42,13 +43,18 @@ def handle_land(branch):
             "git",
             "branch",
             "-f",
-            ghchain.config.base_branch.replace("origin/", ""),
+            ghchain.config.base_branch.replace(f"{ghchain.config.remote}/", ""),
             branch,
         ],
         check=True,
     )
     run_command(
-        ["git", "push", "origin", ghchain.config.base_branch.replace("origin/", "")],
+        [
+            "git",
+            "push",
+            ghchain.config.remote,
+            ghchain.config.base_branch.replace(f"{ghchain.config.remote}/", ""),
+        ],
         check=True,
     )
 
@@ -117,41 +123,42 @@ def handle_land(branch):
                 f"Failed to close linked issues for PR #{pr_number}: {e}"
             )
 
-    if ghchain.config.delete_branch_after_merge:
-        # List all open PRs targeting the branch to be deleted
-        prs = json.loads(
-            run_command(
-                [
-                    "gh",
-                    "pr",
-                    "list",
-                    "--json",
-                    "number",
-                    "--state",
-                    "open",
-                    "--base",
-                    branch,
-                ],
-                check=True,
-            ).stdout
+    # List all open PRs targeting the branch to be deleted
+    prs = json.loads(
+        run_command(
+            [
+                "gh",
+                "pr",
+                "list",
+                "--json",
+                "number",
+                "--state",
+                "open",
+                "--base",
+                branch,
+            ],
+            check=True,
+        ).stdout
+    )
+
+    # Change the base branch of all those PRs to target the configured base branch
+    for pr in prs:
+        run_command(
+            [
+                "gh",
+                "pr",
+                "edit",
+                str(pr["number"]),
+                "--base",
+                ghchain.config.base_branch.replace("origin/", ""),
+            ],
+            # Don't check here because sometimes GitHub updates the PRs faster than the CLI
+            check=False,
         )
 
-        # Change the base branch of all those PRs to target the configured base branch
-        for pr in prs:
-            run_command(
-                [
-                    "gh",
-                    "pr",
-                    "edit",
-                    str(pr["number"]),
-                    "--base",
-                    ghchain.config.base_branch.replace("origin/", ""),
-                ],
-                # Don't check here because sometimes GitHub updates the PRs faster than the CLI
-                check=False,
-            )
-
-        # Delete the remote branch (ignore errors if already deleted)
-        run_command(["git", "push", "origin", "--delete", branch], check=False)
-        # Delete the local branch
-        run_command(["git", "branch", "-D", branch], check=True)
+    # Delete the branch locally and on the remote if configured to do so
+    if ghchain.config.delete_branch_after_merge:
+        run_command(["git", "branch", "-D", branch], check=False)
+        run_command(
+            ["git", "push", ghchain.config.remote, "--delete", branch], check=False
+        )

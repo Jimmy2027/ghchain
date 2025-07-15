@@ -13,6 +13,7 @@ class Config(BaseModel):
     workflows: List[str] = Field(default_factory=list)
     git_username: str = Field(default="")
     base_branch: str = Field(default="origin/main")
+    remote: str = Field(default="origin")
     branch_name_template: str = Field(default="{git_config_author}-{pr_id}")
     delete_branch_after_merge: bool = Field(default=True)
 

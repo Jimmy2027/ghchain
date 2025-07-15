@@ -44,6 +44,7 @@ def patch_config(mocker, git_repo):
 
     mytest_config = """\
  base_branch = "main"
+ remote = "origin"
  """
     ghchain_config = Path(git_repo.working_dir) / ".ghchain.toml"
     ghchain_config.write_text(mytest_config)

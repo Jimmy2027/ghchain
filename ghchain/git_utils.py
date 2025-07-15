@@ -8,11 +8,15 @@ from ghchain.utils import logger, run_command
 
 
 def git_push(branch_name: str):
+    """
+    Push a branch to the remote.
+    """
     try:
-        ghchain.repo.git.push("origin", branch_name)
+        ghchain.repo.git.push(ghchain.config.remote, branch_name)
     except Exception as e:
-        logger.error(f"Error pushing branch {branch_name}: {e}")
-        raise
+        raise click.ClickException(
+            f"Failed to push branch {branch_name} to remote: {e}"
+        )
 
 
 def rebase_onto_target(target: str, interactive: bool = False) -> None:
@@ -79,7 +83,7 @@ def rebase_onto_target(target: str, interactive: bool = False) -> None:
 
     # push each branch to origin
     logger.info(f"Pushing branches: {branches}")
-    command = ["git", "push", "--force-with-lease", "origin"] + branches
+    command = ["git", "push", "--force-with-lease", ghchain.config.remote] + branches
     run_command(command, check=True)
 
 
@@ -155,3 +159,28 @@ def get_issue_url(issue_id: int) -> str:
     issue_url = f"https://github.com/{owner}/{repo_name}/issues/{issue_id}"
 
     return issue_url
+
+
+def get_repo_url() -> str:
+    """
+    Get the remote URL of the repository.
+    """
+    remote_url = ghchain.repo.remotes[ghchain.config.remote].url
+    return remote_url
+
+
+def get_repo_and_owner_from_url(url: str) -> tuple[str, str]:
+    """
+    Extract the repository and owner from the remote URL.
+
+    Args:
+        url (str): The remote URL of the repository.
+
+    Returns:
+        tuple[str, str]: A tuple containing the owner and repository name.
+    """
+    # Extract the owner and repo name from the remote URL
+    splits = url.split("/")
+    owner, repo_name = splits[-2].split(":")[-1], splits[-1].replace(".git", "")
+
+    return owner, repo_name

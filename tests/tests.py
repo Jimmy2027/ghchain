@@ -32,7 +32,7 @@ def setup_mytest_repo(tmpdir_factory):
 
     if "GH_TOKEN" in os.environ:
         command = (
-            f"git remote set-url origin "
+            f"git remote set-url {ghchain.config.remote} "
             f"https://x-access-token:{os.environ['GH_TOKEN']}@"
             f"github.com/HendrikKlug-synthara/mytest.git"
         )
@@ -97,7 +97,7 @@ def cleanup_repo():
     for branch in local_branches:
         run_command(["git", "branch", "-D", branch])
     for branch in remote_branches:
-        run_command(["git", "push", "origin", "--delete", branch])
+        run_command(["git", "push", ghchain.config.remote, "--delete", branch])
 
     prs_json = run_command(
         ["gh", "pr", "list", "--json", "url"],

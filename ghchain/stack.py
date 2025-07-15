@@ -59,7 +59,7 @@ class Stack(BaseModel):
             if not ref.commit:
                 continue
             commit_sha = ref.commit.hexsha
-            if ref.name.startswith("origin/"):
+            if ref.name.startswith(f"{ghchain.config.remote}/"):
                 commit_to_remote_refs[commit_sha].append(ref.name)
             elif "/" not in ref.name:  # assuming local branch names do not contain '/'
                 commit_to_local_refs[commit_sha].append(ref.name)
@@ -240,7 +240,9 @@ class Stack(BaseModel):
 
         # Push all branches with --force-with-lease
         try:
-            ghchain.repo.git.push("--force-with-lease", "origin", *branches_to_push)
+            ghchain.repo.git.push(
+                "--force-with-lease", ghchain.config.remote, *branches_to_push
+            )
             logger.info(
                 f"Successfully pushed branches: {', '.join(branches_to_push)} with --force-with-lease."
             )
@@ -272,37 +274,61 @@ class Stack(BaseModel):
             branch_name = commit.remote_branches[0].split("/")[-1]
             try:
                 ghchain.repo.git.checkout(branch_name)
-                ghchain.repo.git.pull("--rebase", "origin", branch_name)
+                ghchain.repo.git.pull("--rebase", ghchain.config.remote, branch_name)
             except Exception as e:
                 logger.error(f"Failed to pull rebase branch {branch_name}: {e}")
 
         logger.info("Download complete.")
 
+    @classmethod
+    def generate_branch_name(cls, commit: Commit) -> str:
+        """
+        Generate a branch name for the given commit based on the configured template.
+        """
+        branch_id = max([get_next_gh_id(), *[id + 1 for id in cls.branch_ids]])
+        return create_branch_name(ghchain.config.branch_name_template, branch_id)
 
-def find_branch_of_rebased_commit(commit: Commit) -> str:
-    """
-    When a commit is rebased, the commit hash changes. This function checks if there is any branch
-    that has a commit with the message as top commit. If there is, it returns the branch name.
-    """
-    # Get the commit message
-    commit_message = commit.message
+    @classmethod
+    def find_branch_of_rebased_commit(cls, commit: Commit) -> str:
+        """
+        When a commit is rebased, the commit hash changes. This function checks if there is any branch
+        that has a commit with the message as top commit. If there is, it returns the branch name.
+        """
+        # Get the commit message
+        commit_message = commit.message
 
-    # List all branches
-    result = get_all_branches()
-    branches = result.stdout.splitlines()
+        # List all branches
+        result = get_all_branches()
+        branches = result.stdout.splitlines()
 
-    # Check the top commit message of each branch
-    for branch in branches:
-        branch = branch.strip().replace(
-            "* ", ""
-        )  # Remove leading '*' for the current branch
-        result = run_command(
-            ["git", "log", "-1", "--pretty=%B", branch],
-            check=True,
-        )
-        top_commit_message = result.stdout.strip()
-        if top_commit_message == commit_message:
-            logger.debug(f"Found branch {branch} with commit message {commit_message}")
-            return branch
+        # Check the top commit message of each branch
+        for branch in branches:
+            branch = branch.strip().replace(
+                "* ", ""
+            )  # Remove leading '*' for the current branch
+            result = run_command(
+                ["git", "log", "-1", "--pretty=%B", branch],
+                check=True,
+            )
+            top_commit_message = result.stdout.strip()
+            if top_commit_message == commit_message:
+                logger.debug(
+                    f"Found branch {branch} with commit message {commit_message}"
+                )
+                return branch
 
-    return None
+        return None
+
+    def pull_rebase(self):
+        """
+        Pull rebase every local branch in the stack with origin.
+        """
+        current_branch = get_current_branch()
+        for commit in self.commits:
+            for branch_name in commit.branches:
+                if branch_name == self.dev_branch:
+                    continue
+                logger.info(f"Pull rebase branch: {branch_name}")
+                ghchain.repo.git.checkout(branch_name)
+                ghchain.repo.git.pull("--rebase", ghchain.config.remote, branch_name)
+        ghchain.repo.git.checkout(current_branch)
