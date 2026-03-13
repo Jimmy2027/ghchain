@@ -122,6 +122,21 @@ class Stack(BaseModel):
         """
         return [commit.branch for commit in self.commits if commit.branch]
 
+    def _get_branch_target_sha(self, commit: Commit) -> str:
+        """
+        For a non-fixup commit, return the SHA of the last consecutive fixup commit
+        that follows it in the stack. If there are no fixups, return the commit's own SHA.
+        This ensures the branch includes the commit and all its fixup commits.
+        """
+        idx = self.commit2idx[commit.sha]
+        target_sha = commit.sha
+        for following in self.commits[idx + 1 :]:
+            if following.is_fixup:
+                target_sha = following.sha
+            else:
+                break
+        return target_sha
+
     def process_commit(
         self,
         commit: Commit,
@@ -132,8 +147,16 @@ class Stack(BaseModel):
         """
         Create a branch for each commit in the stack that doesn't already have one.
         If create_pr is True, create a PR for each branch.
+        Fixup commits are skipped — they are included in their parent commit's branch.
         """
         pr_created = False
+
+        if commit.is_fixup:
+            logger.debug(f"Skipping fixup commit {commit.sha}: {commit.message}")
+            return pr_created
+
+        branch_target_sha = self._get_branch_target_sha(commit)
+
         if not commit.branch:
             if commit.issue_url:
                 logger.info(f"Creating branch from issue {commit.issue_url}")
@@ -155,10 +178,10 @@ class Stack(BaseModel):
                 # create the branch from the gh issue
                 branch_name = create_branch_from_issue(
                     issue_id=int(commit.issue_url.split("/")[-1]),
-                    base_commit=commit.sha,
+                    base_commit=branch_target_sha,
                 )
             else:
-                ghchain.repo.git.branch(branch_name, commit.sha)
+                ghchain.repo.git.branch(branch_name, branch_target_sha)
             commit.branch = branch_name
 
             # Push the branch to the remote
