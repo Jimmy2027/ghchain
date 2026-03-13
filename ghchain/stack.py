@@ -203,7 +203,8 @@ class Stack(BaseModel):
         Collect all branches in the stack that need to be pushed to the remote,
         ask the user for confirmation, and then push them all with force-with-lease.
         """
-        branches_to_push = []
+        branches_to_push: list[str] = []
+        seen_branches: set[str] = set()
 
         # Collect branches that need to be pushed
         for commit in self.commits:
@@ -214,6 +215,9 @@ class Stack(BaseModel):
                 continue
 
             branch_name = commit.branch
+            if branch_name in seen_branches:
+                continue
+            seen_branches.add(branch_name)
             remote_branch = f"origin/{branch_name}"
 
             try:
