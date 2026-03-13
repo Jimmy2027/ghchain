@@ -2,6 +2,7 @@ from collections import defaultdict
 from typing import List, Optional
 
 import click
+from git import Head, RemoteReference
 from loguru import logger
 from pydantic import BaseModel
 
@@ -59,12 +60,10 @@ class Stack(BaseModel):
             if not ref.commit:
                 continue
             commit_sha = ref.commit.hexsha
-            if ref.name.startswith(f"{ghchain.config.remote}/"):
+            if isinstance(ref, RemoteReference):
                 commit_to_remote_refs[commit_sha].append(ref.name)
-            elif "/" not in ref.name:  # assuming local branch names do not contain '/'
+            elif isinstance(ref, Head):
                 commit_to_local_refs[commit_sha].append(ref.name)
-            else:
-                logger.info(f"Unsupported ref format: {ref.name}")
 
         # Fetch commits in dev_branch but not in base_branch
         commits_diff = list(ghchain.repo.iter_commits(f"{base_branch}..{dev_branch}"))
@@ -271,7 +270,9 @@ class Stack(BaseModel):
                 raise ValueError(
                     f"Commit {commit.sha} has multiple remote branches: {commit.remote_branches}."
                 )
-            branch_name = commit.remote_branches[0].split("/")[-1]
+            branch_name = commit.remote_branches[0].removeprefix(
+                f"{ghchain.config.remote}/"
+            )
             try:
                 ghchain.repo.git.checkout(branch_name)
                 ghchain.repo.git.pull("--rebase", ghchain.config.remote, branch_name)
