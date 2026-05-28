@@ -169,6 +169,45 @@ def get_repo_url() -> str:
     return remote_url
 
 
+def get_branches_in_other_worktrees() -> set[str]:
+    """Return branches checked out in worktrees other than the current one.
+
+    `git rebase --update-refs` cannot advance branch refs that are checked
+    out in another worktree, so this is the pre-flight check before any
+    cascading rebase operation (see Stack.process_commit).
+    """
+    porcelain = run_command(
+        ["git", "worktree", "list", "--porcelain"], check=True
+    ).stdout
+    current_toplevel = run_command(
+        ["git", "rev-parse", "--show-toplevel"], check=True
+    ).stdout.strip()
+
+    records: list[dict[str, str]] = []
+    record: dict[str, str] = {}
+    for line in porcelain.splitlines():
+        if not line:
+            if record:
+                records.append(record)
+                record = {}
+            continue
+        key, _, value = line.partition(" ")
+        record[key] = value.strip()
+    if record:
+        records.append(record)
+
+    branches: set[str] = set()
+    for rec in records:
+        wt_path = rec.get("worktree")
+        branch_ref = rec.get("branch")
+        if not wt_path or not branch_ref:
+            continue
+        if os.path.realpath(wt_path) == os.path.realpath(current_toplevel):
+            continue
+        branches.add(branch_ref.removeprefix("refs/heads/"))
+    return branches
+
+
 def get_repo_and_owner_from_url(url: str) -> tuple[str, str]:
     """
     Extract the repository and owner from the remote URL.

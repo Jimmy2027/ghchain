@@ -11,12 +11,14 @@ from ghchain.commit import Commit
 from ghchain.git_utils import (
     create_branch_name,
     get_all_branches,
+    get_branches_in_other_worktrees,
     get_current_branch,
     git_push,
 )
 from ghchain.github_utils import (
     create_branch_from_issue,
     get_next_gh_id,
+    get_pr_head_branch,
 )
 from ghchain.pull_request import (
     PR,
@@ -137,6 +139,96 @@ class Stack(BaseModel):
                 break
         return target_sha
 
+    def process_stack(
+        self,
+        create_pr: bool = False,
+        draft: bool = False,
+        with_tests: bool = False,
+    ):
+        """Walk the stack bottom-up, processing each commit.
+
+        When ``create_pr`` is True this performs:
+         predict-PR → amend-with-trailer
+        → push → create-PR → verify-and-repair → rebase --update-refs
+        to advance downstream refs. After each iteration the in-memory
+        stack is refreshed from git so subsequent commits see their
+        post-rebase SHAs.
+        """
+        if create_pr:
+            self._check_no_branches_in_other_worktrees()
+
+        for i in range(len(self.commits)):
+            commit = self.commits[i]
+            self.process_commit(
+                commit, create_pr=create_pr, draft=draft, with_tests=with_tests
+            )
+            if create_pr:
+                self._refresh_from_git()
+
+    def _check_no_branches_in_other_worktrees(self):
+        """Abort if any per-commit branch is checked out in another worktree.
+
+        `git rebase --update-refs` cannot move a ref that another worktree
+        has locked, so this would manifest as a confusing mid-cascade
+        failure. Surfacing it up front keeps the stack pristine.
+        """
+        in_other = get_branches_in_other_worktrees()
+        stack_branches = {c.branch for c in self.commits if c.branch}
+        conflict = stack_branches & in_other
+        if conflict:
+            raise click.ClickException(
+                f"Cannot run `ghchain -p`: branch(es) {sorted(conflict)} are "
+                "checked out in another worktree, which prevents "
+                "`git rebase --update-refs`. Close those worktrees (or check "
+                "out a different branch there) and re-run."
+            )
+
+    def _refresh_from_git(self):
+        """Update SHAs and messages of self.commits after a cascade rebase.
+
+        The cascade preserves commit count; we map old → new by stack
+        position. Other Commit-object fields (branch, pull_request,
+        issue_url, notes) are preserved.
+        """
+        new_commits = list(
+            ghchain.repo.iter_commits(f"{self.base_branch}..{self.dev_branch}")
+        )
+        new_commits.reverse()
+        if len(new_commits) != len(self.commits):
+            logger.warning(
+                f"Stack size changed during processing "
+                f"({len(self.commits)} → {len(new_commits)}); skipping refresh."
+            )
+            return
+        for ours, theirs in zip(self.commits, new_commits):
+            ours.sha = theirs.hexsha
+            ours.message = theirs.message.strip()
+
+    def _cascade_rebase(self, old_sha: str, new_sha: str):
+        """Advance dev_branch and downstream per-commit branches onto new_sha."""
+        if old_sha == new_sha:
+            return
+        run_command(
+            [
+                "git",
+                "rebase",
+                "--update-refs",
+                "--onto",
+                new_sha,
+                old_sha,
+                self.dev_branch,
+            ],
+            check=True,
+        )
+
+    def _rename_branch(self, old_name: str, new_name: str):
+        """Rename a local branch and delete the stale remote branch (best-effort)."""
+        ghchain.repo.git.branch("-m", old_name, new_name)
+        try:
+            ghchain.repo.git.push(ghchain.config.remote, "--delete", old_name)
+        except Exception as e:
+            logger.warning(f"Failed to delete stale remote branch {old_name}: {e}")
+
     def process_commit(
         self,
         commit: Commit,
@@ -144,10 +236,12 @@ class Stack(BaseModel):
         draft: bool = False,
         with_tests: bool = False,
     ):
-        """
-        Create a branch for each commit in the stack that doesn't already have one.
-        If create_pr is True, create a PR for each branch.
-        Fixup commits are skipped — they are included in their parent commit's branch.
+        """Process a single commit.
+
+        Without ``create_pr``: just ensure a per-commit branch exists.
+        With ``create_pr``: run the pre-amend trailer flow for this
+        commit (predict → amend → push → create-PR → verify-and-repair).
+        Fixup commits are skipped — they ride along on their parent's branch.
         """
         pr_created = False
 
@@ -157,45 +251,150 @@ class Stack(BaseModel):
 
         branch_target_sha = self._get_branch_target_sha(commit)
 
+        if not create_pr:
+            if not commit.branch:
+                commit.branch = self._create_branch_for_commit(
+                    commit, branch_target_sha
+                )
+                git_push(commit.branch)
+            if with_tests:
+                run_tests_on_branch(commit.branch, commit.pull_request)
+            return pr_created
+
+        return self._process_commit_with_pr(
+            commit, branch_target_sha, draft, with_tests
+        )
+
+    def _create_branch_for_commit(self, commit: Commit, branch_target_sha: str) -> str:
+        """Interactively create a per-commit branch and return its name."""
+        if commit.issue_url:
+            logger.info(f"Creating branch from issue {commit.issue_url}")
+            display_name = "{will be created from issue}"
+        else:
+            branch_id = max([get_next_gh_id(), *[id + 1 for id in self.branch_ids]])
+            display_name = create_branch_name(
+                ghchain.config.branch_name_template, branch_id
+            )
+
+        click.confirm(
+            f"Create branch {display_name} for commit {commit.sha}?\n{commit.message}\n",
+            abort=True,
+            default=True,
+        )
+        logger.info(f"Creating branch {display_name} for commit {commit.sha}")
+
+        if commit.issue_url:
+            return create_branch_from_issue(
+                issue_id=int(commit.issue_url.split("/")[-1]),
+                base_commit=branch_target_sha,
+            )
+        ghchain.repo.git.branch(display_name, branch_target_sha)
+        return display_name
+
+    def _process_commit_with_pr(
+        self,
+        commit: Commit,
+        branch_target_sha: str,
+        draft: bool,
+        with_tests: bool,
+    ) -> bool:
+        pr_created = False
+
+        # Step 1: resolve the target PR id — use the existing PR if we
+        # already opened one for this commit, otherwise predict.
+        if commit.pull_request:
+            target_pr_id = commit.pull_request.pr_id
+        else:
+            target_pr_id = max(
+                [get_next_gh_id(), *[id + 1 for id in self.branch_ids]]
+            )
+
+        # Step 2: ensure the per-commit branch exists.
         if not commit.branch:
             if commit.issue_url:
-                logger.info(f"Creating branch from issue {commit.issue_url}")
-                # set a temporary branch name as it will be created later
-                branch_name = "{will be created from issue}"
-
-            else:
-                branch_id = max([get_next_gh_id(), *[id + 1 for id in self.branch_ids]])
-                branch_name = create_branch_name(
-                    ghchain.config.branch_name_template, branch_id
+                click.confirm(
+                    f"Create branch from issue {commit.issue_url} "
+                    f"for commit {commit.sha}?\n{commit.message}\n",
+                    abort=True,
+                    default=True,
                 )
-            click.confirm(
-                f"Create branch {branch_name} for commit {commit.sha}?\n{commit.message}\n",
-                abort=True,
-                default=True,
-            )
-            logger.info(f"Creating branch {branch_name} for commit {commit.sha}")
-            if commit.issue_url:
-                # create the branch from the gh issue
                 branch_name = create_branch_from_issue(
                     issue_id=int(commit.issue_url.split("/")[-1]),
                     base_commit=branch_target_sha,
                 )
             else:
+                branch_name = create_branch_name(
+                    ghchain.config.branch_name_template, target_pr_id
+                )
+                click.confirm(
+                    f"Create branch {branch_name} for commit {commit.sha}?\n{commit.message}\n",
+                    abort=True,
+                    default=True,
+                )
                 ghchain.repo.git.branch(branch_name, branch_target_sha)
             commit.branch = branch_name
-
-            # Push the branch to the remote
-            git_push(branch_name)
-
         else:
             branch_name = commit.branch
 
-        # If the commit is not a fixup and it does not have a PR, create one
-        if not commit.is_fixup and create_pr and not commit.pull_request:
+        # Step 3: idempotency + trust. Trust an existing trailer only when
+        # the PR it names actually points at the current branch.
+        skip_amend = False
+        if commit.has_pr_trailer():
+            if (
+                commit.pull_request
+                and commit.pr_trailer == commit.pull_request.pr_id
+            ):
+                skip_amend = True
+            elif not commit.pull_request:
+                head_branch = get_pr_head_branch(commit.pr_trailer)
+                if head_branch == branch_name:
+                    target_pr_id = commit.pr_trailer
+                    skip_amend = True
+
+        # Step 4: amend the *logical* (non-fixup) commit with the trailer.
+        # We detach-checkout commit.sha so the amend lands on the non-fixup
+        # parent even when the branch tip is a fixup commit above it.
+        old_sha = commit.sha
+        if skip_amend:
+            new_sha = old_sha
+            amended = False
+        else:
+            branch_was_at_old_sha = (
+                ghchain.repo.git.rev_parse(branch_name) == old_sha
+            )
+            ghchain.repo.git.checkout(old_sha)
+            new_sha = commit.add_pr_trailer(target_pr_id)
+            amended = new_sha != old_sha
+            if amended and branch_was_at_old_sha:
+                # No fixups on top → the branch needs a manual fast-forward
+                # (the cascade rebase below has an empty fixup range here).
+                ghchain.repo.git.branch("-f", branch_name, new_sha)
+
+        # Step 5: cascade-rebase old_sha..dev_branch onto new_sha. This
+        # advances the per-commit branch (via --update-refs for fixup tails),
+        # downstream per-commit branches, and dev_branch in one step.
+        if amended:
+            self._cascade_rebase(old_sha, new_sha)
+
+        # Step 6: push the per-commit branch (force-with-lease if amended
+        # over a stale remote tip).
+        try:
+            ghchain.repo.git.push(ghchain.config.remote, branch_name)
+        except Exception:
+            ghchain.repo.git.push(
+                "--force-with-lease", ghchain.config.remote, branch_name
+            )
+
+        # Step 7: create the PR if we haven't yet.
+        if not commit.pull_request:
+            commit_idx = self.commit2idx[commit.sha]
+            base_branch_for_pr = (
+                ghchain.config.base_branch.replace("origin/", "")
+                if commit_idx == 0
+                else self.commits[commit_idx - 1].branch
+            )
             commit.pull_request = PR.create_pull_request(
-                base_branch=ghchain.config.base_branch.replace("origin/", "")
-                if not self.commit2idx[commit.sha]
-                else self.commits[self.commit2idx[commit.sha] - 1].branch,
+                base_branch=base_branch_for_pr,
                 head_branch=branch_name,
                 title=commit.message.split("\n")[0],
                 body=commit.message,
@@ -207,14 +406,43 @@ class Stack(BaseModel):
             )
             pr_created = True
 
-        if create_pr:
-            update_pr_descriptions(
-                pr_stack=[
-                    c.pull_request
-                    for c in self.commits[: self.commit2idx[commit.sha] + 1]
-                    if c.pull_request
-                ]
-            )
+            # Step 8: verify and repair if GitHub assigned a different number.
+            actual_pr_id = commit.pull_request.pr_id
+            if actual_pr_id != target_pr_id:
+                logger.warning(
+                    f"PR-prediction race: predicted #{target_pr_id} but GitHub "
+                    f"assigned #{actual_pr_id}. Repairing trailer and renaming branch."
+                )
+                repair_old_sha = commit.sha
+                branch_was_at_repair_sha = (
+                    ghchain.repo.git.rev_parse(branch_name) == repair_old_sha
+                )
+                ghchain.repo.git.checkout(repair_old_sha)
+                repair_new_sha = commit.add_pr_trailer(actual_pr_id)
+                if branch_was_at_repair_sha:
+                    ghchain.repo.git.branch("-f", branch_name, repair_new_sha)
+                self._cascade_rebase(repair_old_sha, repair_new_sha)
+
+                if not commit.issue_url:
+                    new_branch_name = create_branch_name(
+                        ghchain.config.branch_name_template, actual_pr_id
+                    )
+                    if new_branch_name != branch_name:
+                        self._rename_branch(branch_name, new_branch_name)
+                        commit.branch = new_branch_name
+                        branch_name = new_branch_name
+                ghchain.repo.git.push(
+                    "--force-with-lease", ghchain.config.remote, branch_name
+                )
+
+        # Step 10: update PR descriptions for the stack so far.
+        update_pr_descriptions(
+            pr_stack=[
+                c.pull_request
+                for c in self.commits[: self.commit2idx[commit.sha] + 1]
+                if c.pull_request
+            ]
+        )
 
         if with_tests:
             run_tests_on_branch(branch_name, commit.pull_request)

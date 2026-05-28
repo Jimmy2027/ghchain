@@ -1,6 +1,7 @@
 import json
 import re
 import shutil
+import subprocess
 from typing import Optional
 
 
@@ -12,11 +13,36 @@ STACK_LIST_END_MARKER = "<!-- STACK_LIST_END -->"
 WORKFLOW_BADGES_START_MARKER = "<!-- WORKFLOW_BADGES_START -->"
 WORKFLOW_BADGES_END_MARKER = "<!-- WORKFLOW_BADGES_END -->"
 
+MIN_GIT_VERSION = (2, 32)
+
 
 # Verify that gh is installed
 if shutil.which("gh") is None:
     raise Exception(
         "gh is not installed. Please install it from https://cli.github.com/"
+    )
+
+
+def _parse_git_version(output: str) -> Optional[tuple[int, int]]:
+    # `git --version` → "git version 2.39.2" (sometimes with vendor suffix)
+    m = re.search(r"(\d+)\.(\d+)", output)
+    if not m:
+        return None
+    return int(m.group(1)), int(m.group(2))
+
+
+# Verify that git is installed and recent enough for `commit --amend --trailer`
+# (introduced in git 2.32, June 2021).
+_git_version_proc = subprocess.run(
+    ["git", "--version"], capture_output=True, text=True, check=False
+)
+if _git_version_proc.returncode != 0:
+    raise Exception("git is not installed or not on PATH.")
+_git_version = _parse_git_version(_git_version_proc.stdout)
+if _git_version is None or _git_version < MIN_GIT_VERSION:
+    raise Exception(
+        f"ghchain requires git >= {MIN_GIT_VERSION[0]}.{MIN_GIT_VERSION[1]}; "
+        f"found `{_git_version_proc.stdout.strip()}`."
     )
 
 
@@ -118,7 +144,23 @@ def get_latest_id(which: str) -> int:
 
 
 def get_next_gh_id() -> int:
-    return max(get_latest_id("pr"), get_latest_id("issue")) + 1
+    # GitHub assigns 1 as the first issue/PR number, so an empty repo
+    # must produce 1 (not 0) on the next allocation.
+    return max(get_latest_id("pr"), get_latest_id("issue"), 0) + 1
+
+
+def get_pr_head_branch(pr_id: int) -> Optional[str]:
+    """Return the head branch name for the PR with `pr_id`, or None if it doesn't exist."""
+    result = run_command(
+        ["gh", "pr", "view", str(pr_id), "--json", "headRefName"],
+        check=False,
+    )
+    if result.returncode != 0:
+        return None
+    try:
+        return json.loads(result.stdout)["headRefName"]
+    except (json.JSONDecodeError, KeyError):
+        return None
 
 
 def get_pr_id_for_branch(branch_name) -> Optional[str]:

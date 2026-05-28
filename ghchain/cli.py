@@ -50,8 +50,9 @@ def ghchain_cli(ctx, create_pr, draft, with_tests):
             # when draft is passed, we know that the user wants to publish the PRs
             create_pr = True
         stack = Stack.create()
-        for commit in stack.commits:
-            stack.process_commit(commit, create_pr, draft, with_tests)
+        stack.process_stack(
+            create_pr=create_pr, draft=draft, with_tests=with_tests
+        )
 
     elif ctx.invoked_subcommand == "help":
         click.echo(ctx.get_help())
@@ -198,15 +199,21 @@ def fix_refs():
     """
     import subprocess
 
+    from ghchain.commit import strip_pr_trailer
     from ghchain.git_utils import get_commit_message_to_branch_mapping, run_command
     from ghchain.stack import Stack
 
     stack = Stack.create()
 
-    commit_msg_to_branch = get_commit_message_to_branch_mapping()
+    # Normalize keys by stripping the `PR: #N` trailer so the lookup works
+    # even when only one side of the comparison has been trailer-stamped yet.
+    commit_msg_to_branch = {
+        strip_pr_trailer(msg): branch
+        for msg, branch in get_commit_message_to_branch_mapping().items()
+    }
     for commit in stack.commits:
         if not commit.branch:
-            branch = commit_msg_to_branch.get(commit.message)
+            branch = commit_msg_to_branch.get(strip_pr_trailer(commit.message))
             if branch:
                 # Ask user if they want to reset the branch to the commit
                 if click.confirm(

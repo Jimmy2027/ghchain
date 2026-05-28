@@ -1,4 +1,5 @@
 import re
+import subprocess
 from typing import Optional
 
 import pandas as pd
@@ -14,6 +15,53 @@ from ghchain.status import (
     mergeable_status_to_ansi,
     review_decision_to_ansi,
 )
+
+PR_TRAILER_KEY = "PR"
+_PR_TRAILER_VALUE_RE = re.compile(r"^#(\d+)$")
+_PR_TRAILER_LINE_RE = re.compile(r"^PR: #\d+\s*$")
+
+
+def strip_pr_trailer(message: str) -> str:
+    """Return `message` with any trailing `PR: #N` trailer lines removed.
+
+    Used by `ghchain fix-refs` to match local commits against remote
+    branch tips mid-migration — some commits in the stack may carry the
+    trailer while the matching remote branch still points at the
+    pre-trailer commit.
+    """
+    lines = message.rstrip("\n").splitlines()
+    while lines and _PR_TRAILER_LINE_RE.match(lines[-1]):
+        lines.pop()
+    while lines and not lines[-1].strip():
+        lines.pop()
+    return "\n".join(lines)
+
+
+def _parse_pr_trailer(message: str) -> Optional[int]:
+    """Parse the `PR: #N` trailer from a commit message.
+
+    Uses `git interpret-trailers --parse` so that we only consider the
+    trailer block at the very end of the message — a stray `PR:` line in
+    the body must not be picked up.
+    """
+    if not message.strip():
+        return None
+    result = subprocess.run(
+        ["git", "interpret-trailers", "--parse"],
+        input=message,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    pr_number: Optional[int] = None
+    for line in result.stdout.splitlines():
+        key, sep, value = line.partition(":")
+        if not sep or key.strip() != PR_TRAILER_KEY:
+            continue
+        m = _PR_TRAILER_VALUE_RE.match(value.strip())
+        if m:
+            pr_number = int(m.group(1))
+    return pr_number
 
 
 def status_to_emoji(status: str):
@@ -68,12 +116,14 @@ def get_commit_notes(
     issue_url: str | None = None,
     workflow_statuses: list[WorkflowStatus] | None = None,
 ):
-    if issue_url:
-        return f"[ghchain]\nissue = {issue_url}\n"
-    if not pr_status and not pr_url and not workflow_statuses:
+    if not issue_url and not pr_status and not pr_url and not workflow_statuses:
         return ""
 
-    notes_str = f"[ghchain]\npr url = {pr_url}\n"
+    notes_str = "[ghchain]\n"
+    if issue_url:
+        notes_str += f"issue = {issue_url}\n"
+    if pr_url:
+        notes_str += f"pr url = {pr_url}\n"
     if pr_status:
         notes_str += (
             f"Review Decision = {review_decision_to_ansi(pr_status.review_decision)}\n"
@@ -189,11 +239,46 @@ class Commit(BaseModel):
             ghchain.repo.git.notes("add", "-f", "-m", self.notes, self.sha)
 
     @property
-    def pr_id(self) -> Optional[int]:
-        if not self.pr_url:
-            return None
-        return int(self.pr_url.rstrip("/").split("/")[-1])
-
-    @property
     def is_fixup(self) -> bool:
         return self.message.startswith("fixup!") or self.message.startswith("squash!")
+
+    @property
+    def pr_trailer(self) -> Optional[int]:
+        """The PR number from the commit's `PR: #N` trailer, or None."""
+        return _parse_pr_trailer(self.message)
+
+    def has_pr_trailer(self) -> bool:
+        return self.pr_trailer is not None
+
+    def add_pr_trailer(self, pr_number: int) -> str:
+        """Amend HEAD to carry a `PR: #pr_number` trailer.
+
+        Precondition: this commit's per-PR branch is currently checked
+        out (HEAD points at ``self.sha``). Returns the SHA of the
+        amended commit. If the commit already carries the requested
+        trailer this is a no-op and the existing SHA is returned.
+        """
+        if self.pr_trailer == pr_number:
+            return self.sha
+
+        current_message = ghchain.repo.git.log("-1", "--format=%B", "HEAD")
+        rewritten = subprocess.run(
+            [
+                "git",
+                "interpret-trailers",
+                "--if-exists",
+                "replace",
+                "--trailer",
+                f"{PR_TRAILER_KEY}: #{pr_number}",
+            ],
+            input=current_message,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+        ghchain.repo.git.commit("--amend", "--no-edit", "-m", rewritten)
+
+        new_sha = ghchain.repo.head.commit.hexsha
+        self.sha = new_sha
+        self.message = rewritten.strip()
+        return new_sha

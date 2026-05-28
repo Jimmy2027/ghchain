@@ -7,6 +7,7 @@ This tool is heavily inspired by [ghstack](https://github.com/ezyang/ghstack) an
 
 -   **Automated Branch Creation**: Creates a new branch for each commit on your development branch.
 -   **Pull Request Management**: Automatically creates a GitHub pull request for each branch, stacking them sequentially for streamlined review.
+-   **`PR: #N` Trailers on Commits**: `ghchain -p` embeds the PR number directly in each commit message as a git trailer. After a squash-merge this leaves a permanent, viewer-agnostic link from the merged commit on `main` back to its originating PR — visible in plain `git log main`.
 -   **Configurable Workflows**: Supports custom GitHub Actions workflows via `.ghchain.toml` for automated testing and checks.
 -   **Dynamic Branch Naming**: Configurable branch naming schemes to match your project's conventions.
 -   **Issue Link Detection**: Customizable regex patterns to detect linked issues in commit messages.
@@ -255,6 +256,10 @@ Notes:
 > [!CAUTION]
 > ghchain uses the github cli [gh](https://cli.github.com/) to interact with the github api.\
 > It needs to be installed and configured before `ghchain` can be used.
+
+> [!IMPORTANT]
+> ghchain requires **git >= 2.32** (June 2021) — `ghchain -p` relies on
+> `git interpret-trailers` to amend each commit with a `PR: #N` trailer.
 
 ### pip release version
 

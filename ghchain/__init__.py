@@ -23,10 +23,11 @@ def _find_config_path(repo: Repo) -> Path:
     worktree_config = Path(repo.working_tree_dir) / ".ghchain.toml"
     if worktree_config.exists():
         return worktree_config
-    # In a worktree, common_dir points to the main repo's .git, so its parent
-    # is the main checkout's working tree. In a non-worktree checkout this
-    # resolves to the same path as working_tree_dir.
-    return Path(repo.common_dir).parent / ".ghchain.toml"
+    # GitPython returns common_dir as an unresolved path like
+    # ".git/worktrees/<name>/../..", so resolve before taking .parent to land on
+    # the main checkout. In a non-worktree repo this is the same directory as
+    # working_tree_dir.
+    return Path(repo.common_dir).resolve().parent / ".ghchain.toml"
 
 
 config = Config.from_toml(_find_config_path(repo))
