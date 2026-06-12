@@ -46,8 +46,22 @@ class Stack(BaseModel):
             dev_branch: The development branch to create the stack from. Defaults to the current branch.
 
         """
+        # Match open PRs to local commits two ways:
+        #  - by SHA: the common case, when local has not diverged from
+        #    what was last pushed for the PR;
+        #  - by head branch: the fallback when the local commit has been
+        #    amended (e.g. by ghchain itself in an earlier run, or by
+        #    rebase) and no longer matches the PR's tip SHA on the
+        #    remote. Without this fallback, ghchain would try to
+        #    recreate the PR and `gh pr create` would refuse with
+        #    "already exists", surfacing as a confusing NoneType crash
+        #    when Step 8 reads ``commit.pull_request.pr_id``.
+        open_prs = get_open_prs()
         sha_to_pull_request_mapping: dict[str, PR] = {
-            pr.commits[-1]: pr for pr in get_open_prs()
+            pr.commits[-1]: pr for pr in open_prs
+        }
+        branch_to_pull_request_mapping: dict[str, PR] = {
+            pr.head_branch: pr for pr in open_prs
         }
 
         base_branch = base_branch or ghchain.config.base_branch
@@ -85,13 +99,16 @@ class Stack(BaseModel):
                 raise ValueError(error_message)
             branch = pointing_branches.pop() if pointing_branches else None
 
+            pull_request = sha_to_pull_request_mapping.get(sha)
+            if pull_request is None and branch is not None:
+                pull_request = branch_to_pull_request_mapping.get(branch)
             commit_obj = Commit(
                 with_workflow_status=with_workflow_status,
                 sha=sha,
                 branch=branch,
                 remote_branches=commit_to_remote_refs[sha],
                 message=message,
-                pull_request=sha_to_pull_request_mapping.get(sha),
+                pull_request=pull_request,
             )
             commits.append(commit_obj)
 
@@ -291,6 +308,68 @@ class Stack(BaseModel):
         ghchain.repo.git.branch(display_name, branch_target_sha)
         return display_name
 
+    def _decide_pr_ref_mode(
+        self, commit: Commit, branch_name: str, target_pr_id: int
+    ) -> tuple[str, bool]:
+        """Pick PR-ref placement mode and detect idempotent no-ops.
+
+        Returns ``(mode, skip_amend)`` where ``mode`` is ``"trailer"``
+        or ``"title"``.
+
+        The decision proceeds in three layers:
+
+        1. **Trust an existing marker.** A ``PR: #N`` trailer or a
+           trailing ``(#N)`` in the title is trusted iff ``N`` is real
+           — either ``commit.pull_request`` (locally cached open PR)
+           names it, or a ``gh pr view`` lookup shows PR ``#N`` whose
+           head points at ``branch_name``. The first trustworthy marker
+           wins.
+        2. **In-progress amend.** If the title already ends with
+           ``(#target_pr_id)`` (e.g. amended earlier in this same run,
+           PR not yet created), treat as title-mode idempotent.
+        3. **Fresh decision.** If the title links a ticket
+           (``commit.extract_issue_id()`` finds a non-self ``(#N)``),
+           use trailer-mode. Otherwise, title-mode.
+        """
+        # Case 1: trust an existing trailer.
+        if commit.has_pr_trailer() and self._marker_points_at_branch(
+            commit, branch_name, commit.pr_trailer
+        ):
+            return ("trailer", True)
+
+        # Case 2: trust an existing title PR ref.
+        if commit.title_pr_ref is not None and self._marker_points_at_branch(
+            commit, branch_name, commit.title_pr_ref
+        ):
+            return ("title", True)
+
+        # Case 3: title already ends with our predicted ref (PR not yet
+        # opened, but we amended earlier in this same run).
+        if commit.title_pr_ref == target_pr_id:
+            return ("title", True)
+
+        # Cases 4 and 5: distinguish ticket-in-title from no-ticket.
+        # ``extract_issue_id`` (title-only, skips our own PR ref) is the
+        # canonical "is there a ticket linked" check.
+        ticket_id = commit.extract_issue_id()
+        if ticket_id is not None and ticket_id != target_pr_id:
+            return ("trailer", False)
+        return ("title", False)
+
+    def _marker_points_at_branch(
+        self, commit: Commit, branch_name: str, ref_id: int
+    ) -> bool:
+        """True if PR ``#ref_id`` actually exists for ``branch_name``.
+
+        Trusts locally-cached open PR info first; falls back to a
+        ``gh pr view`` lookup when no PR is cached for this commit.
+        """
+        if commit.pull_request and ref_id == commit.pull_request.pr_id:
+            return True
+        if not commit.pull_request:
+            return get_pr_head_branch(ref_id) == branch_name
+        return False
+
     def _process_commit_with_pr(
         self,
         commit: Commit,
@@ -336,24 +415,26 @@ class Stack(BaseModel):
         else:
             branch_name = commit.branch
 
-        # Step 3: idempotency + trust. Trust an existing trailer only when
-        # the PR it names actually points at the current branch.
-        skip_amend = False
-        if commit.has_pr_trailer():
-            if (
-                commit.pull_request
-                and commit.pr_trailer == commit.pull_request.pr_id
-            ):
-                skip_amend = True
-            elif not commit.pull_request:
-                head_branch = get_pr_head_branch(commit.pr_trailer)
-                if head_branch == branch_name:
-                    target_pr_id = commit.pr_trailer
-                    skip_amend = True
+        # Step 3: decide PR-ref placement mode + idempotency.
+        # The mode is determined by whether the title already links a
+        # ticket. A trailing ` (#N)` matching ``target_pr_id`` is treated
+        # as our own previously-added PR ref (title-mode idempotency);
+        # any other ``(#N)`` in the title is treated as a ticket and
+        # selects trailer-mode.
+        mode, skip_amend = self._decide_pr_ref_mode(
+            commit, branch_name, target_pr_id
+        )
+        # The trust check for an existing trailer may discover that the
+        # commit already names a real PR — adopt that PR id as target.
+        if skip_amend and mode == "trailer" and commit.has_pr_trailer():
+            target_pr_id = commit.pr_trailer
+        elif skip_amend and mode == "title":
+            target_pr_id = commit.title_pr_ref
 
-        # Step 4: amend the *logical* (non-fixup) commit with the trailer.
-        # We detach-checkout commit.sha so the amend lands on the non-fixup
-        # parent even when the branch tip is a fixup commit above it.
+        # Step 4: amend the *logical* (non-fixup) commit with the chosen
+        # PR ref. We detach-checkout commit.sha so the amend lands on the
+        # non-fixup parent even when the branch tip is a fixup commit
+        # above it.
         old_sha = commit.sha
         if skip_amend:
             new_sha = old_sha
@@ -363,7 +444,7 @@ class Stack(BaseModel):
                 ghchain.repo.git.rev_parse(branch_name) == old_sha
             )
             ghchain.repo.git.checkout(old_sha)
-            new_sha = commit.add_pr_trailer(target_pr_id)
+            new_sha = commit.update_pr_ref(target_pr_id, mode)
             amended = new_sha != old_sha
             if amended and branch_was_at_old_sha:
                 # No fixups on top → the branch needs a manual fast-forward
@@ -404,6 +485,12 @@ class Stack(BaseModel):
                 if commit.issue_url
                 else None,
             )
+            if commit.pull_request is None:
+                raise click.ClickException(
+                    f"Failed to create pull request for branch {branch_name!r}. "
+                    "See the `gh` error above. If a PR for this branch already "
+                    "exists on GitHub, make sure it's open and re-run."
+                )
             pr_created = True
 
             # Step 8: verify and repair if GitHub assigned a different number.
@@ -411,14 +498,15 @@ class Stack(BaseModel):
             if actual_pr_id != target_pr_id:
                 logger.warning(
                     f"PR-prediction race: predicted #{target_pr_id} but GitHub "
-                    f"assigned #{actual_pr_id}. Repairing trailer and renaming branch."
+                    f"assigned #{actual_pr_id}. Repairing PR ref ({mode}-mode) "
+                    "and renaming branch."
                 )
                 repair_old_sha = commit.sha
                 branch_was_at_repair_sha = (
                     ghchain.repo.git.rev_parse(branch_name) == repair_old_sha
                 )
                 ghchain.repo.git.checkout(repair_old_sha)
-                repair_new_sha = commit.add_pr_trailer(actual_pr_id)
+                repair_new_sha = commit.update_pr_ref(actual_pr_id, mode)
                 if branch_was_at_repair_sha:
                     ghchain.repo.git.branch("-f", branch_name, repair_new_sha)
                 self._cascade_rebase(repair_old_sha, repair_new_sha)

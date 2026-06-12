@@ -19,6 +19,10 @@ from ghchain.status import (
 PR_TRAILER_KEY = "PR"
 _PR_TRAILER_VALUE_RE = re.compile(r"^#(\d+)$")
 _PR_TRAILER_LINE_RE = re.compile(r"^PR: #\d+\s*$")
+# Trailing ` (#N)` PR reference appended to commit titles, GitHub
+# squash-merge style. The leading whitespace is required so that
+# `(#42)` is not parsed as a PR ref when it abuts other text.
+_TITLE_PR_REF_RE = re.compile(r"\s\(#(\d+)\)\s*$")
 
 
 def strip_pr_trailer(message: str) -> str:
@@ -212,14 +216,31 @@ class Commit(BaseModel):
         self.update_notes()
 
     def extract_issue_id(self) -> Optional[int]:
-        """
-        Extract the issue ID from the commit message if it contains the GitHub issue id
-        in the format: [issue tags] commit header (#issue id)
-        """
-        pattern = re.compile(ghchain.config.issue_pattern)
-        match = pattern.search(self.message)
+        """Extract the linked-issue ID from the commit title, if any.
 
-        if match:
+        Only the first line is searched — the commit body is excluded so
+        that issue references inside body text are not mistaken for the
+        commit's linked ticket. If the title's match is actually our own
+        trailing `(#PR_ID)` PR reference (matches ``self.pull_request``),
+        it is skipped and the next match (if any) is returned.
+        """
+        title = self.message.split("\n", 1)[0]
+        pattern = re.compile(ghchain.config.issue_pattern)
+        own_pr_id = self.pull_request.pr_id if self.pull_request else None
+        title_pr_ref_match = _TITLE_PR_REF_RE.search(title)
+        title_pr_ref = (
+            int(title_pr_ref_match.group(1)) if title_pr_ref_match else None
+        )
+        is_own_pr_ref = (
+            own_pr_id is not None and title_pr_ref == own_pr_id
+        )
+        for match in pattern.finditer(title):
+            if (
+                is_own_pr_ref
+                and int(match.group(1)) == own_pr_id
+                and match.end() == len(title.rstrip())
+            ):
+                continue
             return int(match.group(1))
         return None
 
@@ -243,9 +264,20 @@ class Commit(BaseModel):
         return self.message.startswith("fixup!") or self.message.startswith("squash!")
 
     @property
+    def title(self) -> str:
+        """The first line of the commit message."""
+        return self.message.split("\n", 1)[0]
+
+    @property
     def pr_trailer(self) -> Optional[int]:
         """The PR number from the commit's `PR: #N` trailer, or None."""
         return _parse_pr_trailer(self.message)
+
+    @property
+    def title_pr_ref(self) -> Optional[int]:
+        """The PR number from a trailing ` (#N)` ref in the title, or None."""
+        match = _TITLE_PR_REF_RE.search(self.title)
+        return int(match.group(1)) if match else None
 
     def has_pr_trailer(self) -> bool:
         return self.pr_trailer is not None
@@ -282,3 +314,48 @@ class Commit(BaseModel):
         self.sha = new_sha
         self.message = rewritten.strip()
         return new_sha
+
+    def add_pr_to_title(self, pr_number: int) -> str:
+        """Amend HEAD to include a trailing ` (#pr_number)` ref in the title.
+
+        If the title already ends with ` (#pr_number)` and the commit
+        carries no stale ``PR:`` trailer this is a no-op. If it ends
+        with ` (#other)` (e.g. a stale prediction from a prediction
+        race), the ref is replaced. Otherwise ` (#pr_number)` is
+        appended to the first line. Any existing ``PR: #N`` trailer is
+        stripped — title-mode and trailer-mode are mutually exclusive,
+        so a leftover trailer (e.g. on a commit cherry-picked from a
+        foreign repo) would be misleading.
+        """
+        if self.title_pr_ref == pr_number and not self.has_pr_trailer():
+            return self.sha
+
+        current_message = ghchain.repo.git.log("-1", "--format=%B", "HEAD")
+        # Strip any existing PR: trailer left over from trailer-mode.
+        stripped = strip_pr_trailer(current_message)
+        # Split into title + rest while preserving the exact body bytes.
+        title, sep, rest = stripped.partition("\n")
+        title = title.rstrip()
+        title = _TITLE_PR_REF_RE.sub("", title)
+        new_title = f"{title} (#{pr_number})"
+        rewritten = new_title + (sep + rest if sep else "")
+        # `git commit -m` discards a single trailing newline; preserve
+        # the body structure by keeping at least one.
+        ghchain.repo.git.commit("--amend", "--no-edit", "-m", rewritten)
+
+        new_sha = ghchain.repo.head.commit.hexsha
+        self.sha = new_sha
+        self.message = rewritten.strip()
+        return new_sha
+
+    def update_pr_ref(self, pr_number: int, mode: str) -> str:
+        """Apply the PR reference in the chosen mode and return the new SHA.
+
+        ``mode`` is ``"trailer"`` (dispatches to :meth:`add_pr_trailer`)
+        or ``"title"`` (dispatches to :meth:`add_pr_to_title`).
+        """
+        if mode == "trailer":
+            return self.add_pr_trailer(pr_number)
+        if mode == "title":
+            return self.add_pr_to_title(pr_number)
+        raise ValueError(f"unknown PR-ref mode: {mode!r}")

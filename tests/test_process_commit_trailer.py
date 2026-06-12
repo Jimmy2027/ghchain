@@ -1,5 +1,9 @@
 """Integration tests for Stack.process_stack / process_commit with the
-PR: #N trailer flow.
+PR-ref placement flow.
+
+Without a ticket in the title, the commit's title gains a trailing
+``(#N)`` ref (GitHub squash-merge style). When the title already links
+a ticket, the commit instead gets a ``PR: #N`` trailer.
 
 Uses a real local git repo (no network); mocks every `gh`-touching helper
 and the PR creation entrypoint.
@@ -84,6 +88,12 @@ def mock_gh(mocker):
     mocker.patch("ghchain.stack.get_next_gh_id", side_effect=fake_next_gh_id)
     mocker.patch("ghchain.pull_request.get_open_prs", return_value=[])
     mocker.patch("ghchain.stack.get_open_prs", return_value=[], create=True)
+    # Issue-URL construction reads the (bogus) origin remote and would
+    # then drive the `gh issue develop` branch-creation flow, which has
+    # no remote. Stub it out so tests that use ticketed titles still
+    # exercise the trailer-mode placement decision without triggering
+    # the linked-issue branch path.
+    mocker.patch("ghchain.commit.get_issue_url", return_value=None)
     head_branch_mock = mocker.patch(
         "ghchain.stack.get_pr_head_branch", return_value=None
     )
@@ -133,10 +143,14 @@ def _read_message(repo: Repo, sha: str) -> str:
     return repo.git.log("-1", "--format=%B", sha)
 
 
-def test_fresh_stack_each_commit_gets_trailer(
+def test_fresh_stack_each_commit_gets_pr_ref_in_title(
     fresh_repo, patched_config, mock_gh
 ):
-    """3-commit stack → each commit gains a `PR: #N` trailer matching its branch."""
+    """3-commit stack → each commit gains a trailing ` (#N)` in its title.
+
+    None of the seed commits link a ticket in the title, so they all
+    end up in title-mode. No ``PR:`` trailer should be added.
+    """
     _make_stack(fresh_repo, 3)
 
     from ghchain.stack import Stack
@@ -144,21 +158,55 @@ def test_fresh_stack_each_commit_gets_trailer(
     stack = Stack.create(base_branch="main")
     stack.process_stack(create_pr=True)
 
-    # After process_stack, the stack has been refreshed; each commit
-    # should have a unique PR trailer and an associated branch.
     refreshed = Stack.create(base_branch="main")
     assert len(refreshed.commits) == 3
     for c in refreshed.commits:
         msg = _read_message(fresh_repo, c.sha)
-        assert "PR: #" in msg, f"commit {c.sha[:8]} missing PR trailer: {msg!r}"
+        assert "PR: #" not in msg, (
+            f"commit {c.sha[:8]} unexpectedly has PR trailer: {msg!r}"
+        )
+        assert c.title_pr_ref is not None, (
+            f"commit {c.sha[:8]} missing title PR ref: {msg!r}"
+        )
         assert c.branch is not None
-        # Branch suffix must match the trailer.
-        trailer_id = c.pr_trailer
-        assert c.branch == f"hk-{trailer_id}"
+        # Branch suffix must match the inline title ref.
+        assert c.branch == f"hk-{c.title_pr_ref}"
+
+
+def test_fresh_stack_with_ticket_in_title_gets_trailer(
+    fresh_repo, patched_config, mock_gh
+):
+    """A commit whose title already links a ticket gets a ``PR:`` trailer
+    (current trailer-mode behavior). The title is left untouched.
+    """
+    from pathlib import Path
+
+    Path("README.md").open("a").write("ticketed change\n")
+    fresh_repo.index.add(["README.md"])
+    fresh_repo.index.commit("fix login bug (#42)\n\nbody")
+
+    from ghchain.stack import Stack
+
+    Stack.create(base_branch="main").process_stack(create_pr=True)
+
+    refreshed = Stack.create(base_branch="main")
+    assert len(refreshed.commits) == 1
+    c = refreshed.commits[0]
+    msg = _read_message(fresh_repo, c.sha)
+    # Title-mode ref must NOT be appended when a ticket is already linked.
+    assert c.title == "fix login bug (#42)"
+    assert c.pr_trailer is not None, f"missing trailer in {msg!r}"
+    assert c.branch == f"hk-{c.pr_trailer}"
 
 
 def test_idempotent_rerun_no_op(fresh_repo, patched_config, mock_gh, mocker):
-    """Re-running process_stack on a fully-stamped stack must not amend."""
+    """Re-running process_stack on a fully-stamped stack must not amend.
+
+    The seed commits have no ticket, so they land in title-mode. The
+    second run exercises the title-ref trust check: each commit's
+    ``title_pr_ref`` is validated by ``get_pr_head_branch`` returning
+    the matching local branch.
+    """
     _make_stack(fresh_repo, 2)
 
     from ghchain.stack import Stack
@@ -166,33 +214,17 @@ def test_idempotent_rerun_no_op(fresh_repo, patched_config, mock_gh, mocker):
     stack = Stack.create(base_branch="main")
     stack.process_stack(create_pr=True)
 
-    # Trust check: pretend the PR for each branch already lives at that branch.
     refreshed = Stack.create(base_branch="main")
 
+    # Trust check: pretend the PR named by each title ref already lives
+    # at that commit's branch.
     def head_lookup(pr_id):
         for c in refreshed.commits:
-            if c.pr_trailer == pr_id:
+            if c.title_pr_ref == pr_id:
                 return c.branch
         return None
 
     mocker.patch("ghchain.stack.get_pr_head_branch", side_effect=head_lookup)
-
-    # Simulate the PRs being already open so the create-PR path is skipped.
-    from ghchain.pull_request import PR
-
-    open_prs = [
-        PR(
-            pr_id=c.pr_trailer,
-            pr_url=f"https://example.com/owner/repo/pull/{c.pr_trailer}",
-            pr_status=None,
-            head_branch=c.branch,
-            body=c.message,
-            title=c.message.split("\n")[0],
-            commits=[c.sha],
-        )
-        for c in refreshed.commits
-    ]
-    mocker.patch("ghchain.pull_request.get_open_prs", return_value=open_prs)
 
     shas_before = [c.sha for c in refreshed.commits]
     Stack.create(base_branch="main").process_stack(create_pr=True)
@@ -201,26 +233,21 @@ def test_idempotent_rerun_no_op(fresh_repo, patched_config, mock_gh, mocker):
     assert shas_before == shas_after, "idempotent re-run must not change SHAs"
 
 
-def test_prediction_race_repairs_trailer_and_renames_branch(
-    fresh_repo, patched_config, mocker
-):
-    """When the actual PR id differs from prediction, trailer and branch are repaired."""
+def _setup_race_mocks(mocker, predicted: int, actual: int):
+    """Common race-condition mocks: predicted PR id but actual differs."""
     from ghchain.pull_request import PR
-    from ghchain.stack import Stack
 
-    _make_stack(fresh_repo, 1)
-
-    # Predict 100, but GitHub actually assigns 105 (race).
-    mocker.patch("ghchain.stack.get_next_gh_id", return_value=100)
+    mocker.patch("ghchain.stack.get_next_gh_id", return_value=predicted)
     mocker.patch("ghchain.pull_request.get_open_prs", return_value=[])
     mocker.patch("ghchain.stack.get_open_prs", return_value=[], create=True)
     mocker.patch("ghchain.stack.get_pr_head_branch", return_value=None)
     mocker.patch("ghchain.stack.update_pr_descriptions")
+    mocker.patch("ghchain.commit.get_issue_url", return_value=None)
 
     def fake_create_pr(**kwargs):
         return PR(
-            pr_id=105,
-            pr_url="https://example.com/owner/repo/pull/105",
+            pr_id=actual,
+            pr_url=f"https://example.com/owner/repo/pull/{actual}",
             pr_status=None,
             head_branch=kwargs["head_branch"],
             body=kwargs["body"],
@@ -231,26 +258,67 @@ def test_prediction_race_repairs_trailer_and_renames_branch(
     mocker.patch.object(PR, "create_pull_request", side_effect=fake_create_pr)
     mocker.patch("ghchain.stack.click.confirm", return_value=True)
 
-    stack = Stack.create(base_branch="main")
-    stack.process_stack(create_pr=True)
 
-    # Branch should have been renamed to hk-105 (and hk-100 deleted locally).
+def test_prediction_race_title_mode_repairs_title_and_renames_branch(
+    fresh_repo, patched_config, mocker
+):
+    """Title-mode race: the title's ``(#predicted)`` is rewritten to
+    ``(#actual)`` and the branch is renamed."""
+    from ghchain.stack import Stack
+
+    _make_stack(fresh_repo, 1)  # no ticket in title → title-mode
+    _setup_race_mocks(mocker, predicted=100, actual=105)
+
+    Stack.create(base_branch="main").process_stack(create_pr=True)
+
     assert "hk-105" in [b.name for b in fresh_repo.branches]
     assert "hk-100" not in [b.name for b in fresh_repo.branches]
 
     refreshed = Stack.create(base_branch="main")
-    assert refreshed.commits[0].pr_trailer == 105
-    assert refreshed.commits[0].branch == "hk-105"
+    c = refreshed.commits[0]
+    msg = _read_message(fresh_repo, c.sha)
+    assert c.title_pr_ref == 105
+    assert "PR: #" not in msg, f"title-mode commit should not carry trailer: {msg!r}"
+    assert "(#100)" not in c.title
+    assert c.branch == "hk-105"
 
 
-def test_cherry_picked_stale_trailer_is_restamped(
+def test_prediction_race_trailer_mode_repairs_trailer_and_renames_branch(
+    fresh_repo, patched_config, mocker
+):
+    """Trailer-mode race: the ``PR:`` trailer is rewritten and the branch
+    is renamed. The title's ticket reference is left untouched."""
+    from pathlib import Path
+
+    Path("README.md").open("a").write("ticketed\n")
+    fresh_repo.index.add(["README.md"])
+    fresh_repo.index.commit("fix login bug (#42)\n\nbody")
+
+    _setup_race_mocks(mocker, predicted=100, actual=105)
+
+    from ghchain.stack import Stack
+
+    Stack.create(base_branch="main").process_stack(create_pr=True)
+
+    assert "hk-105" in [b.name for b in fresh_repo.branches]
+    assert "hk-100" not in [b.name for b in fresh_repo.branches]
+
+    refreshed = Stack.create(base_branch="main")
+    c = refreshed.commits[0]
+    assert c.pr_trailer == 105
+    assert c.title == "fix login bug (#42)"
+    assert c.branch == "hk-105"
+
+
+def test_cherry_picked_stale_trailer_is_replaced_with_title_ref(
     fresh_repo, patched_config, mock_gh, mocker
 ):
-    """A `PR: #99` trailer from a foreign repo whose PR doesn't exist
-    here must be replaced with the locally-predicted PR id."""
+    """A stale ``PR: #99`` trailer from a foreign repo whose PR doesn't
+    exist here is cleaned up. Because the title has no ticket, the
+    locally-predicted PR id lands in title-mode and the stale trailer
+    is dropped."""
     _make_stack(fresh_repo, 1)
 
-    # Inject a stale trailer onto the only commit.
     fresh_repo.git.commit(
         "--amend",
         "--no-edit",
@@ -258,44 +326,74 @@ def test_cherry_picked_stale_trailer_is_restamped(
         "PR: #99",
     )
 
-    # The stale PR #99 doesn't exist (head_branch lookup → None, default).
     from ghchain.stack import Stack
 
-    stack = Stack.create(base_branch="main")
-    stack.process_stack(create_pr=True)
+    Stack.create(base_branch="main").process_stack(create_pr=True)
 
     refreshed = Stack.create(base_branch="main")
-    # The trailer must have been replaced (predicted starts at 100).
-    assert refreshed.commits[0].pr_trailer == 100
-    msg = _read_message(fresh_repo, refreshed.commits[0].sha)
+    c = refreshed.commits[0]
+    msg = _read_message(fresh_repo, c.sha)
     assert "PR: #99" not in msg
-    assert "PR: #100" in msg
+    assert "PR: #" not in msg, f"stale trailer should be stripped: {msg!r}"
+    assert c.title_pr_ref == 100
+    assert c.branch == "hk-100"
 
 
-def test_fixup_commit_does_not_get_own_trailer(
+def test_cherry_picked_stale_trailer_kept_when_ticket_in_title(
+    fresh_repo, patched_config, mock_gh, mocker
+):
+    """If the title has a ticket, the commit is in trailer-mode and the
+    stale ``PR: #99`` trailer is replaced with the correct ``PR: #N``."""
+    from pathlib import Path
+
+    Path("README.md").open("a").write("ticketed stale\n")
+    fresh_repo.index.add(["README.md"])
+    fresh_repo.index.commit("fix login bug (#42)\n\nbody")
+
+    fresh_repo.git.commit(
+        "--amend",
+        "--no-edit",
+        "--trailer",
+        "PR: #99",
+    )
+
+    from ghchain.stack import Stack
+
+    Stack.create(base_branch="main").process_stack(create_pr=True)
+
+    refreshed = Stack.create(base_branch="main")
+    c = refreshed.commits[0]
+    msg = _read_message(fresh_repo, c.sha)
+    assert "PR: #99" not in msg
+    assert c.pr_trailer == 100
+    assert c.title == "fix login bug (#42)"
+
+
+def test_fixup_commit_does_not_get_own_pr_ref(
     fresh_repo, patched_config, mock_gh
 ):
-    """Fixup commits are skipped — only the parent owns the trailer."""
+    """Fixup commits are skipped — only the parent owns the PR ref.
+
+    With the default no-ticket seed, the parent ends up in title-mode.
+    The fixup commit must have neither a title PR ref nor a trailer.
+    """
     _make_stack(fresh_repo, 1)
-    # Add a fixup commit pointing at HEAD.
     Path("README.md").open("a").write("more\n")
     fresh_repo.index.add(["README.md"])
     fresh_repo.index.commit("fixup! commit 0")
 
     from ghchain.stack import Stack
 
-    stack = Stack.create(base_branch="main")
-    stack.process_stack(create_pr=True)
+    Stack.create(base_branch="main").process_stack(create_pr=True)
 
     refreshed = Stack.create(base_branch="main")
-    # Stack has two commits: a non-fixup and a fixup. Only the non-fixup
-    # gets a PR trailer.
     non_fixup = [c for c in refreshed.commits if not c.is_fixup]
     fixup = [c for c in refreshed.commits if c.is_fixup]
     assert len(non_fixup) == 1 and len(fixup) == 1
-    assert non_fixup[0].pr_trailer is not None
+    assert non_fixup[0].title_pr_ref is not None
     fixup_msg = _read_message(fresh_repo, fixup[0].sha)
     assert "PR: #" not in fixup_msg
+    assert fixup[0].title_pr_ref is None
 
 
 def test_worktree_conflict_aborts_before_amend(
@@ -327,23 +425,74 @@ def test_worktree_conflict_aborts_before_amend(
         stack.process_stack(create_pr=True)
     assert "hk-100" in str(excinfo.value.message)
 
-    # No amend happened: the original messages should not contain a trailer.
+    # No amend happened: messages should carry neither marker.
     for c in stack.commits:
         msg = _read_message(fresh_repo, c.sha)
         assert "PR: #" not in msg
+        assert c.title_pr_ref is None
 
 
-def test_no_create_pr_skips_trailer(fresh_repo, patched_config, mock_gh):
-    """`ghchain` without -p must NOT add trailers — legacy branch-creation only."""
-    _make_stack(fresh_repo, 2)
+def test_stack_create_falls_back_to_branch_when_sha_mismatch(
+    fresh_repo, patched_config, mocker
+):
+    """When the local commit's SHA differs from the PR's tip SHA (e.g.
+    because the commit was amended since the PR was opened), the
+    PR is still associated to the commit via the head_branch fallback.
+
+    Regression test for an ``AttributeError: 'NoneType' object has no
+    attribute 'pr_id'`` crash where Step 7 tried to recreate the PR and
+    ``gh pr create`` rightfully refused with "already exists".
+    """
+    from pathlib import Path
+
+    Path("README.md").open("a").write("local change\n")
+    fresh_repo.index.add(["README.md"])
+    fresh_repo.index.commit("local commit\n\nbody.")
+
+    # Pretend a per-commit branch was created for the (now-amended) commit.
+    local_sha = fresh_repo.head.commit.hexsha
+    fresh_repo.create_head("hk-2874", local_sha)
+
+    # The "remote" PR points at a SHA that doesn't match local.
+    from ghchain.pull_request import PR
+
+    stale_sha = "0" * 40
+    pr = PR(
+        pr_id=2874,
+        pr_url="https://example.com/owner/repo/pull/2874",
+        pr_status=None,
+        head_branch="hk-2874",
+        body="body",
+        title="local commit",
+        commits=[stale_sha],
+    )
+    mocker.patch("ghchain.pull_request.get_open_prs", return_value=[pr])
+    mocker.patch("ghchain.stack.get_open_prs", return_value=[pr], create=True)
 
     from ghchain.stack import Stack
 
     stack = Stack.create(base_branch="main")
-    stack.process_stack(create_pr=False)
+    assert len(stack.commits) == 1
+    assert stack.commits[0].pull_request is not None, (
+        "branch-fallback lookup should have matched the existing PR"
+    )
+    assert stack.commits[0].pull_request.pr_id == 2874
+
+
+def test_no_create_pr_skips_pr_ref(fresh_repo, patched_config, mock_gh):
+    """`ghchain` without -p must NOT add a PR ref in either form — legacy
+    branch-creation only."""
+    _make_stack(fresh_repo, 2)
+
+    from ghchain.stack import Stack
+
+    Stack.create(base_branch="main").process_stack(create_pr=False)
 
     refreshed = Stack.create(base_branch="main")
     for c in refreshed.commits:
         msg = _read_message(fresh_repo, c.sha)
         assert "PR: #" not in msg, f"unexpected trailer on commit: {msg!r}"
+        assert c.title_pr_ref is None, (
+            f"unexpected title PR ref on commit: {msg!r}"
+        )
         assert c.branch is not None  # branches are still created

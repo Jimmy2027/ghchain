@@ -7,7 +7,9 @@ This tool is heavily inspired by [ghstack](https://github.com/ezyang/ghstack) an
 
 -   **Automated Branch Creation**: Creates a new branch for each commit on your development branch.
 -   **Pull Request Management**: Automatically creates a GitHub pull request for each branch, stacking them sequentially for streamlined review.
--   **`PR: #N` Trailers on Commits**: `ghchain -p` embeds the PR number directly in each commit message as a git trailer. After a squash-merge this leaves a permanent, viewer-agnostic link from the merged commit on `main` back to its originating PR — visible in plain `git log main`.
+-   **PR References on Commits**: `ghchain -p` embeds the PR number in each commit message so a squash-merged commit on `main` retains a permanent, viewer-agnostic link back to its originating PR (visible in plain `git log main`). Placement depends on the commit title:
+    -   If the title has no linked ticket (no `(#N)` ref), the PR id is appended to the title in GitHub squash-merge style: `fix bug` → `fix bug (#123)`.
+    -   If the title already links a ticket (e.g. `fix login bug (#42)`), the PR id goes into a `PR: #123` trailer in the commit body, leaving the title's ticket reference intact.
 -   **Configurable Workflows**: Supports custom GitHub Actions workflows via `.ghchain.toml` for automated testing and checks.
 -   **Dynamic Branch Naming**: Configurable branch naming schemes to match your project's conventions.
 -   **Issue Link Detection**: Customizable regex patterns to detect linked issues in commit messages.
@@ -259,7 +261,9 @@ Notes:
 
 > [!IMPORTANT]
 > ghchain requires **git >= 2.32** (June 2021) — `ghchain -p` relies on
-> `git interpret-trailers` to amend each commit with a `PR: #N` trailer.
+> `git interpret-trailers` to amend the commit's PR reference (a title
+> ` (#N)` ref or a `PR: #N` trailer, depending on whether the title
+> already links a ticket).
 
 ### pip release version
 
