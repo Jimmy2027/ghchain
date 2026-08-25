@@ -1,5 +1,6 @@
 import os
 import subprocess
+from typing import Union
 
 import click
 
@@ -132,6 +133,13 @@ def get_all_remote_branches() -> list[str]:
     return remote_branches
 
 
+def _decode_message(message: Union[str, bytes]) -> str:
+    """
+    Normalize a commit message, which GitPython may return as bytes.
+    """
+    return message.decode() if isinstance(message, bytes) else message
+
+
 def get_commit_message_to_branch_mapping() -> dict[str, str]:
     """
     Get a mapping of commit messages to branch names.
@@ -142,7 +150,10 @@ def get_commit_message_to_branch_mapping() -> dict[str, str]:
     Returns:
         dict[str, str]: A dictionary mapping commit messages to branch names.
     """
-    return {branch.commit.message: branch.name for branch in ghchain.repo.branches}
+    return {
+        _decode_message(branch.commit.message): branch.name
+        for branch in ghchain.repo.branches
+    }
 
 
 def get_issue_url(issue_id: int) -> str:
