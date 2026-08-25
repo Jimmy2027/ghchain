@@ -1,7 +1,5 @@
 """Tests for ghchain.git_utils.get_branches_in_other_worktrees()."""
 
-import os
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from ghchain.git_utils import get_branches_in_other_worktrees

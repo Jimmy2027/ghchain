@@ -228,12 +228,8 @@ class Commit(BaseModel):
         pattern = re.compile(ghchain.config.issue_pattern)
         own_pr_id = self.pull_request.pr_id if self.pull_request else None
         title_pr_ref_match = _TITLE_PR_REF_RE.search(title)
-        title_pr_ref = (
-            int(title_pr_ref_match.group(1)) if title_pr_ref_match else None
-        )
-        is_own_pr_ref = (
-            own_pr_id is not None and title_pr_ref == own_pr_id
-        )
+        title_pr_ref = int(title_pr_ref_match.group(1)) if title_pr_ref_match else None
+        is_own_pr_ref = own_pr_id is not None and title_pr_ref == own_pr_id
         for match in pattern.finditer(title):
             if (
                 is_own_pr_ref

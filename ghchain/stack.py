@@ -384,9 +384,7 @@ class Stack(BaseModel):
         if commit.pull_request:
             target_pr_id = commit.pull_request.pr_id
         else:
-            target_pr_id = max(
-                [get_next_gh_id(), *[id + 1 for id in self.branch_ids]]
-            )
+            target_pr_id = max([get_next_gh_id(), *[id + 1 for id in self.branch_ids]])
 
         # Step 2: ensure the per-commit branch exists.
         if not commit.branch:
@@ -421,9 +419,7 @@ class Stack(BaseModel):
         # as our own previously-added PR ref (title-mode idempotency);
         # any other ``(#N)`` in the title is treated as a ticket and
         # selects trailer-mode.
-        mode, skip_amend = self._decide_pr_ref_mode(
-            commit, branch_name, target_pr_id
-        )
+        mode, skip_amend = self._decide_pr_ref_mode(commit, branch_name, target_pr_id)
         # The trust check for an existing trailer may discover that the
         # commit already names a real PR — adopt that PR id as target.
         if skip_amend and mode == "trailer" and commit.has_pr_trailer():
@@ -440,9 +436,7 @@ class Stack(BaseModel):
             new_sha = old_sha
             amended = False
         else:
-            branch_was_at_old_sha = (
-                ghchain.repo.git.rev_parse(branch_name) == old_sha
-            )
+            branch_was_at_old_sha = ghchain.repo.git.rev_parse(branch_name) == old_sha
             ghchain.repo.git.checkout(old_sha)
             new_sha = commit.update_pr_ref(target_pr_id, mode)
             amended = new_sha != old_sha

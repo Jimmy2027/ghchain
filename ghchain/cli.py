@@ -50,9 +50,7 @@ def ghchain_cli(ctx, create_pr, draft, with_tests):
             # when draft is passed, we know that the user wants to publish the PRs
             create_pr = True
         stack = Stack.create()
-        stack.process_stack(
-            create_pr=create_pr, draft=draft, with_tests=with_tests
-        )
+        stack.process_stack(create_pr=create_pr, draft=draft, with_tests=with_tests)
 
     elif ctx.invoked_subcommand == "help":
         click.echo(ctx.get_help())

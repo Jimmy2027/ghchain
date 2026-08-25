@@ -16,8 +16,6 @@ from pathlib import Path
 import pytest
 from git import Repo
 
-import ghchain
-
 
 @pytest.fixture
 def fresh_repo(mocker, tmp_path):
@@ -162,12 +160,12 @@ def test_fresh_stack_each_commit_gets_pr_ref_in_title(
     assert len(refreshed.commits) == 3
     for c in refreshed.commits:
         msg = _read_message(fresh_repo, c.sha)
-        assert "PR: #" not in msg, (
-            f"commit {c.sha[:8]} unexpectedly has PR trailer: {msg!r}"
-        )
-        assert c.title_pr_ref is not None, (
-            f"commit {c.sha[:8]} missing title PR ref: {msg!r}"
-        )
+        assert (
+            "PR: #" not in msg
+        ), f"commit {c.sha[:8]} unexpectedly has PR trailer: {msg!r}"
+        assert (
+            c.title_pr_ref is not None
+        ), f"commit {c.sha[:8]} missing title PR ref: {msg!r}"
         assert c.branch is not None
         # Branch suffix must match the inline title ref.
         assert c.branch == f"hk-{c.title_pr_ref}"
@@ -369,9 +367,7 @@ def test_cherry_picked_stale_trailer_kept_when_ticket_in_title(
     assert c.title == "fix login bug (#42)"
 
 
-def test_fixup_commit_does_not_get_own_pr_ref(
-    fresh_repo, patched_config, mock_gh
-):
+def test_fixup_commit_does_not_get_own_pr_ref(fresh_repo, patched_config, mock_gh):
     """Fixup commits are skipped — only the parent owns the PR ref.
 
     With the default no-ticket seed, the parent ends up in title-mode.
@@ -473,9 +469,9 @@ def test_stack_create_falls_back_to_branch_when_sha_mismatch(
 
     stack = Stack.create(base_branch="main")
     assert len(stack.commits) == 1
-    assert stack.commits[0].pull_request is not None, (
-        "branch-fallback lookup should have matched the existing PR"
-    )
+    assert (
+        stack.commits[0].pull_request is not None
+    ), "branch-fallback lookup should have matched the existing PR"
     assert stack.commits[0].pull_request.pr_id == 2874
 
 
@@ -492,7 +488,5 @@ def test_no_create_pr_skips_pr_ref(fresh_repo, patched_config, mock_gh):
     for c in refreshed.commits:
         msg = _read_message(fresh_repo, c.sha)
         assert "PR: #" not in msg, f"unexpected trailer on commit: {msg!r}"
-        assert c.title_pr_ref is None, (
-            f"unexpected title PR ref on commit: {msg!r}"
-        )
+        assert c.title_pr_ref is None, f"unexpected title PR ref on commit: {msg!r}"
         assert c.branch is not None  # branches are still created
