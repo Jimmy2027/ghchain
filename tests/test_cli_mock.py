@@ -60,8 +60,10 @@ def test_fix_refs_on_dev_branch(mocker, create_stack, patch_config):
 
     # mock get_open_prs to return an empty list
     mocker.patch("ghchain.pull_request.get_open_prs", return_value=[])
+    mocker.patch("ghchain.stack.get_open_prs", return_value=[])
     # mock get_next_gh_id to return 42
     mocker.patch("ghchain.github_utils.get_next_gh_id", return_value=42)
+    mocker.patch("ghchain.stack.get_next_gh_id", return_value=42)
     # mock ghchain.stack.git_push to do nothing
     mocker.patch("ghchain.stack.git_push")
 

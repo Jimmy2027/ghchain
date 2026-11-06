@@ -2,7 +2,6 @@ from collections import defaultdict
 from typing import List, Optional
 
 import click
-from git import Head, RemoteReference
 from loguru import logger
 from pydantic import BaseModel
 
@@ -27,6 +26,9 @@ from ghchain.pull_request import (
     update_pr_descriptions,
 )
 from ghchain.utils import run_command
+
+HEADS_PREFIX = "refs/heads/"
+REMOTES_PREFIX = "refs/remotes/"
 
 
 class Stack(BaseModel):
@@ -72,14 +74,20 @@ class Stack(BaseModel):
         # Create mappings for commit SHA to local and remote branch names
         commit_to_local_refs = defaultdict(list)
         commit_to_remote_refs = defaultdict(list)
+        remote_prefix = f"{REMOTES_PREFIX}{ghchain.config.remote}/"
         for ref in ghchain.repo.references:
-            if not ref.commit:
+            # Classify by full ref path: branch names may contain '/'
+            # (e.g. refs/heads/user/feature), and refs outside heads and
+            # remotes (tags, stash, tool checkpoints) may point at non-commits.
+            if ref.path.startswith(remote_prefix):
+                refs = commit_to_remote_refs
+            elif ref.path.startswith(HEADS_PREFIX):
+                refs = commit_to_local_refs
+            else:
+                logger.debug(f"Skipping ref: {ref.path}")
                 continue
-            commit_sha = ref.commit.hexsha
-            if isinstance(ref, RemoteReference):
-                commit_to_remote_refs[commit_sha].append(ref.name)
-            elif isinstance(ref, Head):
-                commit_to_local_refs[commit_sha].append(ref.name)
+
+            refs[ref.commit.hexsha].append(ref.name)
 
         # Fetch commits in dev_branch but not in base_branch
         commits_diff = list(ghchain.repo.iter_commits(f"{base_branch}..{dev_branch}"))
