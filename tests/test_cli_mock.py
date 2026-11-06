@@ -70,7 +70,7 @@ def test_fix_refs_on_dev_branch(mocker, create_stack, patch_config):
     cli_runner = CliRunner()
 
     # create a branch for every commit
-    result = cli_runner.invoke(cli.ghchain_cli, [])
+    result = cli_runner.invoke(cli.ghchain_cli, [], input="y\n" * 4)
 
     assert result.exit_code == 0, f"Error: {result.output}"
 

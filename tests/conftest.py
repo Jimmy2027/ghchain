@@ -25,6 +25,16 @@ if is_debugging():
         raise excinfo.value
 
 
+@pytest.fixture(autouse=True)
+def no_gpg_signing(monkeypatch):
+    """Keep tests from invoking gpg when they create commits or tags."""
+    monkeypatch.setenv("GIT_CONFIG_COUNT", "2")
+    monkeypatch.setenv("GIT_CONFIG_KEY_0", "commit.gpgsign")
+    monkeypatch.setenv("GIT_CONFIG_VALUE_0", "false")
+    monkeypatch.setenv("GIT_CONFIG_KEY_1", "tag.gpgsign")
+    monkeypatch.setenv("GIT_CONFIG_VALUE_1", "false")
+
+
 @pytest.fixture
 def mock_repo(monkeypatch):
     repo = MagicMock(spec=Repo)
